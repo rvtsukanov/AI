@@ -1,5 +1,5 @@
 import gym
-from policy_gradient import PolicyGradient
+from policy_gradient_layers import PolicyGradient
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -49,9 +49,7 @@ if __name__ == "__main__":
         n_x = env.observation_space.n,
         n_y = env.action_space.n,
         learning_rate=0.001,
-        reward_decay=0.95,
-        load_path=load_path,
-        save_path=save_path
+        reward_decay=0.95
     )
 
 
@@ -69,7 +67,7 @@ if __name__ == "__main__":
 
             # 2. Take action in the environment
             observation_, reward, done, info = env.step(action)
-            env.render()
+            #env.render()
             observation_ = to_cat(observation_, env.observation_space.n)
 
             # 3. Store transition for training

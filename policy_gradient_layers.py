@@ -62,6 +62,7 @@ class PolicyGradient:
 
         # Run forward propagation to get softmax probabilities
         prob_weights = self.sess.run(self.outputs_softmax, feed_dict = {self.X: observation})
+        print("PROBS: ", prob_weights)
 
         # Select action using a biased sample
         # this will return the index of the action we've sampled
@@ -91,8 +92,6 @@ class PolicyGradient:
             cumulative = cumulative * self.gamma + self.episode_rewards[t]
             discounted_episode_rewards[t] = cumulative
 
-        discounted_episode_rewards -= np.mean(discounted_episode_rewards)
-        discounted_episode_rewards /= np.std(discounted_episode_rewards)
         return discounted_episode_rewards
 
 
