@@ -28,6 +28,7 @@ def discount_and_norm_rewards(episode_rewards, gamma):
 
 
 env = gym.make('FrozenLakeNotSlippery-v0')
+#env = gym.make("FrozenLake-v0")
 s = env.reset()
 
 tf.reset_default_graph()
@@ -57,9 +58,7 @@ wnl = tf.multiply(nl, q)
 loss = tf.reduce_mean(wnl)
 opt = tf.train.AdamOptimizer(learning_rate=0.05).minimize(loss)
 
-saver = tf.train.Saver()
-
-num_episodes = 5000
+num_episodes = 10000
 num_steps = 200
 
 successes = []
@@ -79,6 +78,7 @@ with tf.Session() as sess:
             s = to_cat(s, env.observation_space.n).reshape(1, -1)
             output = sess.run([soft_out], feed_dict={state: s})
             probs = output[0][0]
+            print("probs: ", probs)
             a = np.random.choice(env.action_space.n, p=probs)
             new_state, reward, done, _ = env.step(a)
             total_rew.append(reward)
