@@ -5,36 +5,61 @@ import gym
 import matplotlib.pyplot as plt
 
 
+from gym.envs.registration import register
+register(
+    id='FrozenLakeNotSlippery-v0',
+    entry_point='gym.envs.toy_text:FrozenLakeEnv',
+    kwargs={'map_name' : '4x4', 'is_slippery': False},
+    max_episode_steps=100,
+)
+
+
 def to_cat(a, n):
     return np.array([1 if a == i else 0 for i in range(n)])
 
-env = gym.make('FrozenLake-v0')
+
+def discount_and_norm_rewards(episode_rewards, gamma):
+    discounted_episode_rewards = np.zeros_like(episode_rewards)
+    cumulative = 0
+    for t in reversed(range(len(episode_rewards))):
+        cumulative = cumulative * gamma + episode_rewards[t]
+        discounted_episode_rewards[t] = cumulative
+    return discounted_episode_rewards
+
+
+env = gym.make('FrozenLakeNotSlippery-v0')
 s = env.reset()
 
 tf.reset_default_graph()
-
 state = tf.placeholder('float32', shape=[None, env.observation_space.n], name="STATE")
 actions = tf.squeeze(tf.placeholder('int32', name="ACTIONS"))
 q = tf.placeholder('float32', name="Q")
 
-#inp = tf.layers.dense(state, 8, name="INPUT", kernel_initializer=tf.initializers.zeros)
-#out = tf.layers.dense(inp, env.action_space.n, kernel_initializer=tf.initializers.zeros)
+inp = tf.layers.dense(
+    state,
+    10,
+    name="INPUT",
+    kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.3),
+    bias_initializer=tf.initializers.constant(0.1)
+)
 
-inp = tf.layers.dense(state, 8, name="INPUT", kernel_initializer=tf.zeros_initializer())
-out = tf.layers.dense(inp, env.action_space.n, kernel_initializer=tf.zeros_initializer())
+out = tf.layers.dense(
+    inp,
+    env.action_space.n,
+    kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.3),
+    bias_initializer=tf.initializers.constant(0.1)
+)
 
-sh = tf.shape(out)
 soft_out = tf.nn.softmax(out)
 
-nl = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=out, labels=actions) # logs = [0.111, 0.222]; actions = 3
+nl = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=out, labels=actions)
 wnl = tf.multiply(nl, q)
 loss = tf.reduce_mean(wnl)
-opt = tf.train.GradientDescentOptimizer(learning_rate=0.05)
-upd = opt.minimize(-loss)
+opt = tf.train.AdamOptimizer(learning_rate=0.05).minimize(loss)
 
 saver = tf.train.Saver()
 
-num_episodes = 10000
+num_episodes = 5000
 num_steps = 200
 
 successes = []
@@ -43,7 +68,6 @@ slice = 100
 success_counter = 0
 
 with tf.Session() as sess:
-    #sess = tf_debug.LocalCLIDebugWrapperSession(sess)
     sess.run(tf.global_variables_initializer())
     for episode in range(num_episodes):
         s = env.reset()
@@ -53,14 +77,13 @@ with tf.Session() as sess:
         #   print("Episode: ", episode)
         for step in range(num_steps):
             s = to_cat(s, env.observation_space.n).reshape(1, -1)
-            #print(s)
             output = sess.run([soft_out], feed_dict={state: s})
-            #print(output)
             probs = output[0][0]
             a = np.random.choice(env.action_space.n, p=probs)
             new_state, reward, done, _ = env.step(a)
             total_rew.append(reward)
-            trajectory.append((s, a, reward))
+            trajectory.append((s, a, reward)) #no problems?
+
             if done:
                 if reward != 0:
                     env.render()
@@ -76,10 +99,8 @@ with tf.Session() as sess:
             rr = st[2]
             qq = sum(total_rew[n:])
             #print(aa, ss, rr, qq)
-            _, ls = sess.run([upd, loss], feed_dict={state: ss, actions: aa, q: qq})
-        #save_path = saver.save(sess, "./models/model.ckpt")
-        #if episode  == 0:
-            #print("Loss: ", ls)
+            _, ls = sess.run([opt, loss], feed_dict={state: ss, actions: aa, q: qq})
+
         if episode % slice == 0:
             print("Episode: ", episode)
             print("Successes to all: ", success_counter/slice)
