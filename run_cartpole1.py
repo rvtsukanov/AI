@@ -1,5 +1,5 @@
 import gym
-from policy_gradient import PolicyGradient
+from policy_gradient_layers import PolicyGradient
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -11,23 +11,14 @@ register(
     kwargs={'map_name' : '4x4', 'is_slippery': False},
     max_episode_steps=100,
 )
-
-#env = gym.make("FrozenLake-v0")
 env = gym.make('FrozenLakeNotSlippery-v0')
+
 
 def to_cat(a, n):
     return np.array([1 if a == i else 0 for i in range(n)])
 
-#env = gym.make('CartPole-v0')
-#env = env.unwrapped
-
-# Policy gradient has high variance, seed for reproducability
-#env.seed(1)
-
 print("env.action_space", env.action_space)
 print("env.observation_space", env.observation_space)
-#print("env.observation_space.high", env.observation_space.high)
-#print("env.observation_space.low", env.observation_space.low)
 
 
 RENDER_ENV = False
@@ -49,9 +40,7 @@ if __name__ == "__main__":
         n_x = env.observation_space.n,
         n_y = env.action_space.n,
         learning_rate=0.001,
-        reward_decay=0.95,
-        load_path=load_path,
-        save_path=save_path
+        reward_decay=0.95
     )
 
 
