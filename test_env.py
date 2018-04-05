@@ -56,9 +56,9 @@ soft_out = tf.nn.softmax(out)
 nl = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=out, labels=actions)
 wnl = tf.multiply(nl, q)
 loss = tf.reduce_mean(wnl)
-opt = tf.train.AdamOptimizer(learning_rate=0.05).minimize(loss)
+opt = tf.train.GradientDescentOptimizer(learning_rate=0.05).minimize(loss)
 
-num_episodes = 10000
+num_episodes = 500
 num_steps = 200
 
 successes = []

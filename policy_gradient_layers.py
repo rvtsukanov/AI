@@ -95,7 +95,6 @@ class PolicyGradient:
         return discounted_episode_rewards
 
 
-
     def build_network(self):
         with tf.name_scope('inputs'):
             self.X = tf.placeholder(tf.float32, [None, self.n_x], name="X")

@@ -49,6 +49,11 @@ upd = opt.minimize(-loss, global_step=tf.train.get_global_step())
 '''
 upd = opt.minimize(loss)
 
+successes = []
+success_episodes = []
+slice = 100
+success_counter = 0
+
 # main frame
 with tf.Session() as sess:
     sess = tf_debug.LocalCLIDebugWrapperSession(sess)
@@ -73,6 +78,7 @@ with tf.Session() as sess:
                 env.render()
                 print(episode, step)
                 break
+        
 
         # print(np.array(set_of_states).shape, np.array(set_of_actions).shape, np.array(set_of_rewards).shape)
         new_set_of_rewards = []
@@ -84,6 +90,12 @@ with tf.Session() as sess:
         _, so, ls = sess.run([upd, softmaxed_output, loss], feed_dict={state: set_of_states,
                                                                        actions: set_of_actions,
                                                                        returns: [new_set_of_rewards]})
+        if episode % slice == 0:
+            print("Episode: ", episode)
+            print("Successes to all: ", success_counter / slice)
+            success_episodes.append(episode)
+            successes.append(success_counter / slice)
+            success_counter = 0
 
         #if episode % 5 == 0:
             #print("Episode: ", episode, "loss: ", ls)
