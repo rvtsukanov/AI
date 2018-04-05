@@ -26,10 +26,18 @@ obs_len = len(s)
 
 
 tf.reset_default_graph()
+
+
 state = tf.placeholder('float32', shape=[None, obs_len], name="STATE")
 actions = tf.squeeze(tf.placeholder('int32', name="ACTIONS"))
-q = tf.placeholder('float32', name="Q")
 
+q_estimation = tf.placeholder('float32', name="Q-Estimation")
+
+'''
+============================
+Actor = Policy Approxiamtion
+============================
+'''
 inp = tf.layers.dense(
     state,
     10,
@@ -48,10 +56,41 @@ out = tf.layers.dense(
 soft_out = tf.nn.softmax(out)
 
 nl = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=out, labels=actions)
-wnl = tf.multiply(nl, q)
+wnl = tf.multiply(nl, q_estimation)
 loss = tf.reduce_mean(wnl)
 opt = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss) #sometimes GDO works better (dont know why)
 
+'''
+=======================
+Critic = Approximation of Q-function
+=======================
+'''
+#q_action = tf.placeholder('int32')  # do we need different action nodes?
+q_return = tf.placeholder('float32', name="Q-Return")  # sum of rewards on rest of traj
+q_inp = tf.layers.dense(
+    tf.concat(state, actions),
+    10,
+    name="Q-input",
+    kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.3),
+    bias_initializer=tf.initializers.constant(0.1)
+)
+
+q_out = tf.layers.dense(
+    q_inp,
+    1,
+    name="Q-output",
+    kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.3),
+    bias_initializer=tf.initializers.constant(0.1)
+)
+
+q_loss = tf.losses.mean_squared_error(q_out, q_return)
+q_opt = tf.train.AdamOptimizer().minimize(q_loss)
+
+'''
+=======================
+HyperParams
+=======================
+'''
 num_episodes = 2000
 num_steps = 2000
 gamma = 0.9
@@ -84,26 +123,24 @@ with tf.Session() as sess:
 
                 break
             s = new_state
-        #print("Probs: ", probs)
-        #print(total_rew)
         disc = discount_and_norm_rewards(total_rew, gamma)
-        #break
 
-        for n, st in enumerate(trajectory):
+        for n, st in enumerate(trajectory):  # use minibatches??
             ss = st[0]
-            aa = [int(st[1])]
+            aa = int(st[1])
             qq = disc[n]
-            print(aa, ss, qq)
-            _, ls = sess.run([opt, loss], feed_dict={state: [ss], actions: aa, q: qq})
+            q_approximated, _ = sess.run([q_out, q_opt], feed_dict={state: [ss], actions: [aa], q_return: qq})
+            sess.run([opt], feed_dict={state: [ss], actions: [aa], q_estimation: q_approximated})
 
-        '''
+
+
         if episode % slice == 0:
             print("Episode: ", episode)
             print("Successes to all: ", success_counter/slice)
             success_episodes.append(episode)
             successes.append(success_counter/slice)
             success_counter = 0
-        '''
+
 
 plt.plot(success_episodes, successes)
 #plt.show()
