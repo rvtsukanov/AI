@@ -51,7 +51,7 @@ wnl = tf.multiply(nl, q)
 loss = tf.reduce_mean(wnl)
 opt = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss) #sometimes GDO works better (dont know why)
 
-num_episodes = 5000
+num_episodes = 2000
 num_steps = 2000
 gamma = 0.9
 
