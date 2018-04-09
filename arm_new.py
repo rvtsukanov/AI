@@ -93,8 +93,9 @@ with tf.Session() as sess:
             ss = st[0]
             aa = [int(st[1])]
             qq = disc[n]
-            print(aa, ss, qq)
+
             _, ls = sess.run([opt, loss], feed_dict={state: [ss], actions: aa, q: qq})
+        print("estimated Q: ", qq)
 
         '''
         if episode % slice == 0:
