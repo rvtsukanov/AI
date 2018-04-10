@@ -66,7 +66,6 @@ opt = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss) #sometimes GDO 
 Critic = Approximation of Q-function
 =======================
 '''
-#q_action = tf.placeholder('int32')  # do we need different action nodes?
 q_return = tf.placeholder('float32', name="Q-Return")  # sum of rewards on rest of traj
 q_inp = tf.layers.dense(
     tf.concat(state, actions),
@@ -86,6 +85,18 @@ q_out = tf.layers.dense(
 
 q_loss = tf.losses.mean_squared_error(q_out, q_return)
 q_opt = tf.train.AdamOptimizer(0.01).minimize(q_loss)
+
+'''
+=======================
+Advantage Function
+=======================
+'''
+
+
+#A = tf.Variable('float32')
+#A = q_out - value
+
+
 
 '''
 =======================
@@ -141,6 +152,7 @@ with tf.Session() as sess:
                 qq = disc[n]
                 q_approximated, _ = sess.run([q_out, q_opt], feed_dict={state: [ss], actions: [aa], q_return: qq})
                 sess.run([opt], feed_dict={state: [ss], actions: [aa], q_estimation: q_approximated})
+
 
             if episode % slice == 0:
                 print("Episode: ", episode)
