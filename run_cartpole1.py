@@ -58,7 +58,6 @@ if __name__ == "__main__":
 
             # 2. Take action in the environment
             observation_, reward, done, info = env.step(action)
-            #env.render()
             observation_ = to_cat(observation_, env.observation_space.n)
 
             # 3. Store transition for training
