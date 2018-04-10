@@ -102,7 +102,7 @@ q_opt = tf.train.AdamOptimizer(0.01).minimize(q_loss)
 Value-function approximation (linear)
 =====================================
 '''
-
+'''
 value = tf.layers.dense(
     state,
     1,
@@ -114,13 +114,13 @@ value = tf.layers.dense(
 
 v_loss = tf.losses.mean_squared_error(value, q_return)
 v_opt = tf.train.AdamOptimizer(0.01).minimize(v_loss)
-
+'''
 
 ################################
 
-A = q_out - value
+#A = q_out - value
 current_policy = tf.placeholder('float32')
-trpo_loss = 1./(obs_len * env.action_space.n) * soft_out/current_policy * A + \
+trpo_loss = 1./(obs_len * env.action_space.n) * soft_out/current_policy * q_out + \
             penalty * (1./obs_len * kl(soft_out, current_policy) - KL_delta)     #does it work with A?
 trpo_opt = tf.train.AdamOptimizer(0.01).minimize(trpo_loss)
 
@@ -182,8 +182,12 @@ with tf.Session() as sess:
                 ss = st[0]
                 aa = int(st[1])
                 qq = disc[n]
-                q_approximated, val, _, _ = sess.run([q_out, value, v_opt, q_opt], feed_dict={state: [ss], actions: [aa], q_return: qq})
-                soft, _ = sess.run([soft_out, opt], feed_dict={state: [ss], actions: [aa], q_estimation: q_approximated})
+                #q_approximated, val, _, _ = sess.run([q_out, value, v_opt, q_opt], feed_dict={state: [ss], actions: [aa], q_return: qq})
+                q_approximated, _ = sess.run([q_out, q_opt],
+                                                     feed_dict={state: [ss], actions: [aa], q_return: qq})
+                #soft, _ = sess.run([soft_out, opt], feed_dict={state: [ss], actions: [aa], q_estimation: q_approximated})
+                soft, _ = sess.run([soft_out, opt],
+                                   feed_dict={state: [ss], actions: [aa], q_estimation: q_approximated})
                 for j in range(trpo_steps):
                     sess.run([trpo_opt],
                              feed_dict={state: [ss], actions: [aa], q_estimation: q_approximated, current_policy: [soft]})
