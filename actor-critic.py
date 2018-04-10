@@ -87,9 +87,9 @@ q_loss = tf.losses.mean_squared_error(q_out, q_return)
 q_opt = tf.train.AdamOptimizer(0.01).minimize(q_loss)
 
 '''
-============================
+=====================================
 Value-function approximation (linear)
-============================
+=====================================
 '''
 
 value = tf.layers.dense(
@@ -101,7 +101,8 @@ value = tf.layers.dense(
 )
 #to learn v-function we use MSE
 
-
+v_loss = tf.losses.mean_squared_error(value, q_return)
+v_opt = tf.train.AdamOptimizer(0.01).minimize(v_loss)
 
 
 '''
