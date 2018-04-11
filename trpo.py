@@ -1,16 +1,20 @@
 import tensorflow as tf
-from tensorflow.python import debug as tf_debug
+from tensorflow.contrib.opt import ScipyOptimizerInterface as SOI
 import numpy as np
 import gym
 import matplotlib.pyplot as plt
 from arm_env import ArmEnv
 
-KL_delta = 0.1
-penalty = 10
+KL_delta = 0.05
+penalty = 1
+
+
+def kl_num(p, q):
+    return np.sum(np.multiply(p, np.log(p/q)))
 
 
 def kl(p, q):
-    return tf.multiply(p, tf.log(p/q))
+    return tf.reduce_sum(tf.multiply(p, tf.log(p/q)))
 
 
 def to_cat(a, n):
@@ -102,7 +106,7 @@ q_opt = tf.train.AdamOptimizer(0.01).minimize(q_loss)
 Value-function approximation (linear)
 =====================================
 '''
-'''
+''''''
 value = tf.layers.dense(
     state,
     1,
@@ -114,15 +118,27 @@ value = tf.layers.dense(
 
 v_loss = tf.losses.mean_squared_error(value, q_return)
 v_opt = tf.train.AdamOptimizer(0.01).minimize(v_loss)
-'''
 
+################################
+#!!!!! ADVANTAGE SHOULD BE FIXED
 ################################
 
 #A = q_out - value
-current_policy = tf.placeholder('float32')
-trpo_loss = 1./(obs_len * env.action_space.n) * soft_out/current_policy * q_out + \
-            penalty * (1./obs_len * kl(soft_out, current_policy) - KL_delta)     #does it work with A?
-trpo_opt = tf.train.AdamOptimizer(0.01).minimize(trpo_loss)
+#current_policy = tf.placeholder('float32')
+#current_advantage = tf.placeholder('float32')
+
+soft_out_k = tf.placeholder('float32')
+A_k = tf.placeholder('float32')
+A = q_return - q_estimation
+
+trpo_obj = -tf.reduce_sum(tf.gather(tf.squeeze(soft_out), actions)/soft_out_k * A_k) #unbiased by 1/n || SUM OF A and S?
+constraints = [-kl(soft_out_k, soft_out) + KL_delta] #unbiased too
+trpo_opt = SOI(trpo_obj, inequalities=constraints, method='SLSQP', options={'maxiter':3}) #maethos SLSQP is bad -> inf
+
+#trpo_loss = tf.reduce_sum(
+#    tf.multiply(1./(obs_len * env.action_space.n), soft_out/current_policy) * current_advantage + \
+#    penalty * (1./obs_len * kl(soft_out, current_policy) - KL_delta))     #does it work with A?
+#trpo_opt = tf.train.AdamOptimizer(0.01).minimize(-trpo_loss)
 
 
 '''
@@ -137,7 +153,7 @@ gamma = 1.0
 
 successes = []
 success_episodes = []
-slice = 100
+slice = 10
 success_counter = 0
 learn_flag = False
 
@@ -146,65 +162,76 @@ learn_flag = False
 Main
 =======================
 '''
-with tf.Session() as sess:
-    sess.run(tf.global_variables_initializer())
-    for episode in range(num_episodes):
-        s = env.reset()
-        trajectory = []
-        total_rew = []
-        for step in range(num_steps):
-            output = sess.run([soft_out], feed_dict={state: [s]})
-            probs = output[0][0]
-            if not learn_flag:
-                a = np.random.choice(env.action_space.n, p=[1./env.action_space.n for i in range(env.action_space.n)])
-                print("probs: ", probs, learn_flag, "action: ", a)
-                #env.render()
-            else:
-                a = np.random.choice(env.action_space.n, p=probs)
-                print("probs: ", probs, learn_flag)
-            new_state, reward, done, _ = env.step(a)
-            total_rew.append(reward)
-            trajectory.append((s, a, reward))
+try:
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        for episode in range(num_episodes):
+            s = env.reset()
+            trajectory = []
+            total_rew = []
+            for step in range(num_steps):
+                output = sess.run([soft_out], feed_dict={state: [s]})
+                probs = output[0][0]
+                if not learn_flag:
+                    a = np.random.choice(env.action_space.n, p=[1./env.action_space.n for i in range(env.action_space.n)])
+                    print("probs: ", probs, learn_flag, "action: ", a)
+                    #env.render()
+                else:
+                    a = np.random.choice(env.action_space.n, p=probs)
+                    print("probs: ", probs, learn_flag)
+                new_state, reward, done, _ = env.step(a)
+                total_rew.append(reward)
+                trajectory.append((s, a, reward))
 
-            if done:
-                if reward != 0:
-                    learn_flag = True
-                    env.render()
-                    print(reward)
-                    success_counter += 1
+                if done:
+                    if reward != 0:
+                        learn_flag = True
+                        env.render()
+                        print(reward)
+                        success_counter += 1
 
-                break
-            s = new_state
-        disc = discount_and_norm_rewards(total_rew, gamma)
+                    break
+                s = new_state
+            disc = discount_and_norm_rewards(total_rew, gamma)
 
-        if learn_flag:
-            for n, st in enumerate(trajectory):  # use minibatches??
-                ss = st[0]
-                aa = int(st[1])
-                qq = disc[n]
-                #q_approximated, val, _, _ = sess.run([q_out, value, v_opt, q_opt], feed_dict={state: [ss], actions: [aa], q_return: qq})
-                q_approximated, _ = sess.run([q_out, q_opt],
-                                                     feed_dict={state: [ss], actions: [aa], q_return: qq})
-                #soft, _ = sess.run([soft_out, opt], feed_dict={state: [ss], actions: [aa], q_estimation: q_approximated})
-                soft, _ = sess.run([soft_out, opt],
-                                   feed_dict={state: [ss], actions: [aa], q_estimation: q_approximated})
-                for j in range(trpo_steps):
-                    sess.run([trpo_opt],
-                             feed_dict={state: [ss], actions: [aa], q_estimation: q_approximated, current_policy: [soft]})
+            if learn_flag:
+                for n, st in enumerate(trajectory):  # use minibatches??
+                    ss = st[0]
+                    aa = int(st[1])
+                    qq = disc[n]
+                    q_approximated, val, _, _ = sess.run([q_out, value, v_opt, q_opt],
+                                                         feed_dict={state: [ss], actions: [aa], q_return: qq}
+                                                         )
+                    _, soft, adv = sess.run([opt, soft_out, A],
+                                            feed_dict={state: [ss], actions: [aa],
+                                                       q_estimation: q_approximated,
+                                                       q_return: qq}
+                                            )
+                    #print("ADV: ", adv)
+                    if episode > 1:
+                        #print('==================================')
+                        feed_dict = [[state, [ss]], [soft_out_k, [soft]], [A_k, [adv]], [actions, [aa]]]
+                        trpo_opt.minimize(sess, feed_dict=feed_dict)
+                    #print("adv: ", adv-val)
 
-            if episode % slice == 0:
-                print("Episode: ", episode)
-                print("Successes to all: ", success_counter/slice)
-                success_episodes.append(episode)
-                successes.append(success_counter/slice)
-                success_counter = 0
+                if episode % slice == 0:
+                    print("Episode: ", episode)
+                    print("Successes to all: ", success_counter/slice)
+                    success_episodes.append(episode)
+                    successes.append(success_counter/slice)
+                    success_counter = 0
 
 
 
 
-plt.plot(success_episodes, successes)
-plt.show()
-print(successes)
+    plt.plot(success_episodes, successes)
+    plt.show()
+    print(successes)
+except KeyboardInterrupt:
+    plt.plot(success_episodes, successes)
+    plt.show()
+    raise
+
 
 
 
