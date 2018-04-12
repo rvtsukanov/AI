@@ -5,8 +5,7 @@ import gym
 import matplotlib.pyplot as plt
 from arm_env import ArmEnv
 
-KL_delta = 0.05
-penalty = 1
+KL_delta = 10 ** (-4)
 
 
 def kl_num(p, q):
@@ -102,11 +101,12 @@ q_loss = tf.losses.mean_squared_error(q_out, q_return)
 q_opt = tf.train.AdamOptimizer(0.01).minimize(q_loss)
 
 '''
+Possible to use value-function to estimate advantage
 =====================================
 Value-function approximation (linear)
 =====================================
 '''
-''''''
+'''
 value = tf.layers.dense(
     state,
     1,
@@ -118,29 +118,40 @@ value = tf.layers.dense(
 
 v_loss = tf.losses.mean_squared_error(value, q_return)
 v_opt = tf.train.AdamOptimizer(0.01).minimize(v_loss)
-
-################################
-#!!!!! ADVANTAGE SHOULD BE FIXED
-################################
-
-#A = q_out - value
-#current_policy = tf.placeholder('float32')
-#current_advantage = tf.placeholder('float32')
-
-soft_out_k = tf.placeholder('float32')
-A_k = tf.placeholder('float32')
-A = q_return - q_estimation
-
-trpo_obj = -tf.reduce_sum(tf.gather(tf.squeeze(soft_out), actions)/soft_out_k * A_k) #unbiased by 1/n || SUM OF A and S?
-constraints = [-kl(soft_out_k, soft_out) + KL_delta] #unbiased too
-trpo_opt = SOI(trpo_obj, inequalities=constraints, method='SLSQP', options={'maxiter':3}) #maethos SLSQP is bad -> inf
-
-#trpo_loss = tf.reduce_sum(
-#    tf.multiply(1./(obs_len * env.action_space.n), soft_out/current_policy) * current_advantage + \
-#    penalty * (1./obs_len * kl(soft_out, current_policy) - KL_delta))     #does it work with A?
-#trpo_opt = tf.train.AdamOptimizer(0.01).minimize(-trpo_loss)
+'''
 
 
+# I use index _k to fix variables in graph
+
+# Fixed probs on k-th iteration
+soft_out_k = tf.placeholder('float32', name="SOFTOUT_K")
+
+# Fixed advantage on k-th iteration
+A_k = tf.placeholder('float32', name="A_K")
+
+# Number of steps to estimate expectation
+N = tf.placeholder('float32', name="number")
+
+# Advantage function = emperical_return - baseline
+A = q_return - q_out
+
+
+cumulative_trpo_obj = 0
+
+# Choosing particular action "actions" and multiply by A_k
+trpo_obj = (tf.gather(tf.squeeze(soft_out), actions)/
+                          tf.gather(tf.squeeze(soft_out_k), actions) * A_k)
+cumulative_trpo_obj += trpo_obj
+
+# KL(soft_out_k, soft_out) should be less than KL_delta
+constraints = [(-kl(soft_out_k, soft_out) + KL_delta)]
+
+
+#Use ScipyOptimiztationInterface (SOI) to solve optimization task with constrains
+trpo_opt = SOI(-1./N * cumulative_trpo_obj,
+               inequalities=constraints,
+               method='SLSQP',
+               options={'maxiter':1})
 '''
 =======================
 HyperParams
@@ -149,7 +160,7 @@ HyperParams
 num_episodes = 10000
 num_steps = 200
 trpo_steps = 5
-gamma = 1.0
+gamma = 0.9
 
 successes = []
 success_episodes = []
@@ -173,9 +184,9 @@ try:
                 output = sess.run([soft_out], feed_dict={state: [s]})
                 probs = output[0][0]
                 if not learn_flag:
-                    a = np.random.choice(env.action_space.n, p=[1./env.action_space.n for i in range(env.action_space.n)])
+                    a = np.random.choice(env.action_space.n,
+                                         p=[1./env.action_space.n for i in range(env.action_space.n)])
                     print("probs: ", probs, learn_flag, "action: ", a)
-                    #env.render()
                 else:
                     a = np.random.choice(env.action_space.n, p=probs)
                     print("probs: ", probs, learn_flag)
@@ -195,24 +206,31 @@ try:
             disc = discount_and_norm_rewards(total_rew, gamma)
 
             if learn_flag:
-                for n, st in enumerate(trajectory):  # use minibatches??
+                for n, st in enumerate(trajectory):
                     ss = st[0]
                     aa = int(st[1])
                     qq = disc[n]
-                    q_approximated, val, _, _ = sess.run([q_out, value, v_opt, q_opt],
-                                                         feed_dict={state: [ss], actions: [aa], q_return: qq}
+
+                    #Learning Critic
+                    q_approximated, _ = sess.run([q_out, q_opt],
+                                                         feed_dict={state: [ss],
+                                                                    actions: [aa],
+                                                                    q_return: qq}
                                                          )
+                    #Learning Actor
                     _, soft, adv = sess.run([opt, soft_out, A],
-                                            feed_dict={state: [ss], actions: [aa],
+                                            feed_dict={state: [ss],
+                                                       actions: [aa],
                                                        q_estimation: q_approximated,
                                                        q_return: qq}
                                             )
-                    #print("ADV: ", adv)
-                    if episode > 1:
-                        #print('==================================')
-                        feed_dict = [[state, [ss]], [soft_out_k, [soft]], [A_k, [adv]], [actions, [aa]]]
+                    #Skip 10 episodes before TRPO to avoid noise in estimting advantge function
+                    if episode > 10:
+                        feed_dict = [[state, [ss]], [soft_out_k, [soft]], [A_k, [adv]], [actions, [aa]], [N, [n+episode+1]]]
+                        #Calling optimizer
                         trpo_opt.minimize(sess, feed_dict=feed_dict)
-                    #print("adv: ", adv-val)
+                        print(soft)
+                        print("adv: ", adv, " = ", qq, " - ", q_approximated)
 
                 if episode % slice == 0:
                     print("Episode: ", episode)
