@@ -30,6 +30,7 @@ class TRPO():
         self.q_estimation = tf.placeholder('float32', name="Q-EST")
         self.build_actor()
         self.build_critic()
+        self.build_trpo_SOI()
 
     '''
     ============================
@@ -84,7 +85,7 @@ class TRPO():
         self.q_loss = tf.losses.mean_squared_error(self.q_out, self.q_return)
         self.q_opt = tf.train.AdamOptimizer(0.01).minimize(self.q_loss)
 
-    def build_trpo(self):
+    def build_trpo_SOI(self):
         # I use index _k to fix variables in graph
         # Fixed probs on k-th iteration
         self.soft_out_k = tf.placeholder('float32', name="SOFTOUT_K")
@@ -97,23 +98,38 @@ class TRPO():
 
         # Advantage function = emperical_return - baseline
         self.A = self.q_return - self.q_out
-        self.cumulative_trpo_obj = 0
 
         # Choosing particular action "actions" and multiply by A_k
-        trpo_obj = (tf.gather(tf.squeeze(self.soft_out), self.actions) /
-                    tf.gather(tf.squeeze(self.soft_out_k), self.actions) * self.A_k)
-        self.cumulative_trpo_obj += trpo_obj
+        trpo_obj = -tf.reduce_mean(self.A * tf.gather(tf.exp(self.soft_out - self.soft_out_k), self.actions))
 
         # KL(soft_out_k, soft_out) should be less than KL_delta
         constraints = [(-self.kl(self.soft_out_k, self.soft_out) + self.KL_delta)]
 
         # Use ScipyOptimiztationInterface (SOI) to solve optimization task with constrains
-        self.trpo_opt = SOI(-1. / self.N * self.cumulative_trpo_obj,
-                            inequalities=constraints,
+        self.trpo_opt = SOI(trpo_obj,
                             method='SLSQP',
+                            inequalities=constraints,
                             options={'maxiter': 1})
 
-    def roll_trajectory(self):
+    def apply_trpo_SOI(self, s, a, q_app, soft, r):
+
+        #Use trajectory s -> a -> r to optimize policy in Trust-Region interval
+        feed_dict = [[self.state, [s]],
+                     [self.soft_out_k, [soft]],
+                     [self.actions, [a]],
+                     [self.q_return, [r]],
+                     [self.q_out, q_app]]
+
+        self.trpo_opt.minimize(self.sess, feed_dict=feed_dict)
+
+    def apply_tf_optimization(self):
+        # TODO: Implement TF-optimisation
+        pass
+
+
+
+
+    def roll_trajectory(self, episode):
         s = self.env.reset()
         self.trajectory = []
         self.total_rew = []
@@ -141,7 +157,7 @@ class TRPO():
                 return
             s = new_state
 
-        print('======================')
+        print('====================== end of episode {} ======================'.format(episode))
 
     def learn(self):
         self.learn_flag = False
@@ -155,7 +171,7 @@ class TRPO():
             self.success_counter = 0
 
             for episode in range(self.num_episodes):
-                self.roll_trajectory()
+                self.roll_trajectory(episode)
                 disc = self.discount_and_norm_rewards(self.total_rew, self.gamma)
                 for n, st in enumerate(self.trajectory):
                     traj_state = st[0]
@@ -168,6 +184,7 @@ class TRPO():
                                                                  self.actions: [traj_action],
                                                                  self.q_return: traj_reward}
                                                       )
+
                     #Learning Actor
                     _, soft = self.sess.run([self.opt, self.soft_out],
                                             feed_dict={self.state: [traj_state],
@@ -175,6 +192,9 @@ class TRPO():
                                                        self.q_estimation: q_approximated,
                                                        self.q_return: traj_reward}
                                             )
+                    #Optimization Actor-Parameters
+                    self.apply_trpo_SOI(traj_state, traj_action, q_approximated, soft, traj_reward)
+
                 if episode % self.slice == 0:
                     print("Episode: ", episode)
                     print("Successes to all: ", self.success_counter / self.slice)
@@ -185,6 +205,10 @@ class TRPO():
             plt.plot(self.success_episodes, self.successes)
             plt.show()
             print(self.successes)
+
+    @staticmethod
+    def kl(p, q):
+        return tf.reduce_sum(tf.multiply(p, tf.log(p / q)))
 
     @staticmethod
     def kl_num(p, q):
@@ -202,9 +226,6 @@ class TRPO():
             cumulative = cumulative * gamma + episode_rewards[t]
             discounted_episode_rewards[t] = cumulative
         return discounted_episode_rewards
-
-
-
 
 trpo = TRPO(num_episodes=1000)
 trpo.learn()
