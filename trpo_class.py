@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.contrib.opt import ScipyOptimizerInterface as SOI
+from tensorflow.contrib.distributions import kl_divergence as kl
 import numpy as np
 import gym
 import matplotlib.pyplot as plt
@@ -30,7 +31,9 @@ class TRPO():
         self.q_estimation = tf.placeholder('float32', name="Q-EST")
         self.build_actor()
         self.build_critic()
-        self.build_trpo_SOI()
+        self.build_trpo_tf()
+        #self.build_trpo_SOI()
+
 
     '''
     ============================
@@ -109,7 +112,7 @@ class TRPO():
         self.trpo_opt = SOI(trpo_obj,
                             method='SLSQP',
                             inequalities=constraints,
-                            options={'maxiter': 1})
+                            options={'maxiter': 3})
 
     def apply_trpo_SOI(self, s, a, q_app, soft, r):
 
@@ -122,11 +125,51 @@ class TRPO():
 
         self.trpo_opt.minimize(self.sess, feed_dict=feed_dict)
 
-    def apply_tf_optimization(self):
-        # TODO: Implement TF-optimisation
-        pass
 
 
+    def build_trpo_tf(self):
+
+        self.beta = tf.placeholder('float32')
+        self.eta = tf.placeholder('float32')
+        self.learn_rate = tf.placeholder('float32')
+        self.learn_rate_value = 0.001
+
+        self.soft_out_k = tf.placeholder('float32', name="SOFTOUT_K")
+        # Fixed advantage on k-th iteration
+        self.A_k = tf.placeholder('float32', name="A_K")
+        self.A = self.q_return - self.q_out #?
+        self.D_KL = self.kl(self.soft_out, self.soft_out_k)
+
+        trpo_loss_1 = -tf.reduce_mean(self.A_k * tf.gather(tf.exp(self.soft_out - self.soft_out_k), self.actions))
+        trpo_loss_2 = self.beta * self.D_KL
+        trpo_loss_3 = self.eta * tf.square(tf.maximum(0.0, self.KL_delta - 2 * self.D_KL))
+
+        trpo_total_loss = trpo_loss_1 + trpo_loss_2 + trpo_loss_3
+        self.trpo_opt = tf.train.AdamOptimizer(self.learn_rate).minimize(trpo_total_loss)
+
+
+
+    def apply_trpo_tf(self, old_policy, advantage, state, actions, num_steps):
+        beta = 0.5
+        eta = 0.5
+        DKL = 0.01
+        for i in range(num_steps):
+            if DKL > 2 * self.KL_delta:
+                beta *= 1.5
+                if beta > 30:
+                    self.learn_rate_value /= 1.5
+            elif DKL < 0.5 * self.KL_delta:
+                beta /= 1.05
+                if beta < 1./30:
+                    self.learn_rate_value *= 1.5
+
+            _, DKL = self.sess.run([self.trpo_opt, self.D_KL], feed_dict={self.A_k: advantage,
+                                                          self.soft_out_k: old_policy,
+                                                          self.actions: actions,
+                                                          self.state: [state],
+                                                          self.beta: beta,
+                                                          self.eta: eta,
+                                                          self.learn_rate: self.learn_rate_value})
 
 
     def roll_trajectory(self, episode):
@@ -186,14 +229,17 @@ class TRPO():
                                                       )
 
                     #Learning Actor
-                    _, soft = self.sess.run([self.opt, self.soft_out],
+                    _, soft, adv = self.sess.run([self.opt, self.soft_out, self.A],
                                             feed_dict={self.state: [traj_state],
                                                        self.actions: [traj_action],
                                                        self.q_estimation: q_approximated,
                                                        self.q_return: traj_reward}
                                             )
+
                     #Optimization Actor-Parameters
-                    self.apply_trpo_SOI(traj_state, traj_action, q_approximated, soft, traj_reward)
+                    #self.apply_trpo_SOI(traj_state, traj_action, q_approximated, soft, traj_reward)
+                    if episode > 50:
+                        self.apply_trpo_tf(soft, adv, traj_state, traj_action, 20)
 
                 if episode % self.slice == 0:
                     print("Episode: ", episode)
