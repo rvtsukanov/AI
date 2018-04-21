@@ -46,7 +46,7 @@ class ArmEnv(CoreEnv):
                  finish_reward, action_minus_reward, tower_target_size):
         self._size_x = size_x
         self._size_y = size_y
-
+        self._grid = np.zeros(shape=(self._size_x, self._size_y), dtype=np.int32)
         self._agents_num = agents_num
         self.agents = []
 
@@ -70,11 +70,13 @@ class ArmEnv(CoreEnv):
 
     def grid_to_bin(self):
         grid = np.array(self._grid, copy=True)
+        '''
         for agent in self.agents:
             if not agent.toogle:
                 grid[agent.pos_x, agent.pos_y] = 2
             else:
                 grid[agent.pos_x, agent.pos_y] = 3
+        '''
         s = []
         for i in np.nditer(grid):
             s.append(int(i))
@@ -85,7 +87,8 @@ class ArmEnv(CoreEnv):
         for j in range(self._grid.shape[1]):
             t = 0
             for i in np.arange(self._grid.shape[0] - 1, 0, -1):
-                if self._grid[i, j] == 1 and self._grid[i - 1, j] == 0 and (i + 1 == self._grid.shape[0] or self._grid[i + 1, j] == 1):
+                if self._grid[i, j] == 1 and self._grid[i - 1, j] == 0 \
+                        and (i + 1 == self._grid.shape[0] or self._grid[i + 1, j] == 1):
                     t = self._grid.shape[0] - i
                     break
             if t > h:
@@ -160,7 +163,7 @@ class ArmEnv(CoreEnv):
         # done (boolean): whether the episode has ended, in which case further step() calls will return undefined results
         # info (dict): contains auxiliary diagnostic information (helpful for debugging, and sometimes learning)
 
-        if self.get_tower_height() == self._tower_target_size and self._magnet_toggle == False:
+        if self.get_tower_height() == self._tower_target_size:
             self._done = True
             reward += self._finish_reward
             info = True
@@ -180,12 +183,13 @@ class ArmEnv(CoreEnv):
     # return: (states, observations)
     def reset(self):
         self._episode_length = 0
-        self._grid = np.zeros(shape=(self._size_x, self._size_y), dtype=np.int32)
+
+        # creating agents
         for i in range(self._agents_num):
             self.agents.append(Agent(i, 0, i, False))
             self._grid[0, i] = 2 + self.agents[i].toogle * 1
+
         self._done = False
-        print(self.agents[0].toogle, self.agents[1].toogle)
         cubes_left = self._cubes_cnt
         for (x, y), value in reversed(list(np.ndenumerate(self._grid))):
             if cubes_left == 0:
@@ -209,25 +213,27 @@ class ArmEnv(CoreEnv):
         outfile.write(str(out))
         outfile.write('\n')
 
+    def use_path(self, path={2: [3, 3, 2, 2, 4, 1, 2, 5, 0]}):
+        for ag in path:
+            for act in path[ag]:
+                env.step((4, act))
 
-env = ArmEnv(size_x=4,
-             size_y=3,
+env = ArmEnv(size_x=5,
+             size_y=5,
              agents_num=2,
-             cubes_cnt=4,
+             cubes_cnt=7,
              episode_max_length=200,
              finish_reward=200,
              action_minus_reward=0.0,
              tower_target_size=3)
 
 
+'''
+LEFT=0,
+UP=1,
+RIGHT=2,
+DOWN=3,
+ON=4,
+OFF=5
+'''
 
-env.step((4, 4))
-env.render()
-env.step((3, 4))
-env.render()
-env.step((3, 4))
-env.render()
-env.step((1, 3))
-env.render()
-env.step((5, 3))
-env.render()
