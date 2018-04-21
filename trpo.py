@@ -151,7 +151,7 @@ constraints = [(-kl(soft_out_k, soft_out) + KL_delta)]
 trpo_opt = SOI(-1./N * cumulative_trpo_obj,
                inequalities=constraints,
                method='SLSQP',
-               options={'maxiter':1})
+               options={'maxiter':1}) #it is not enough!
 '''
 =======================
 HyperParams

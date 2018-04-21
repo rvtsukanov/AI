@@ -31,8 +31,8 @@ class TRPO():
         self.q_estimation = tf.placeholder('float32', name="Q-EST")
         self.build_actor()
         self.build_critic()
-        self.build_trpo_tf()
-        #self.build_trpo_SOI()
+        #self.build_trpo_tf()
+        self.build_trpo_SOI()
 
 
     '''
@@ -103,7 +103,8 @@ class TRPO():
         self.A = self.q_return - self.q_out
 
         # Choosing particular action "actions" and multiply by A_k
-        trpo_obj = -tf.reduce_mean(self.A * tf.gather(tf.exp(self.soft_out - self.soft_out_k), self.actions))
+        #here was a mistake -> A instead of A_k
+        trpo_obj = -tf.reduce_mean(self.A_k * tf.gather(tf.exp(self.soft_out - self.soft_out_k), tf.squeeze(self.actions)))
 
         # KL(soft_out_k, soft_out) should be less than KL_delta
         constraints = [(-self.kl(self.soft_out_k, self.soft_out) + self.KL_delta)]
@@ -114,14 +115,15 @@ class TRPO():
                             inequalities=constraints,
                             options={'maxiter': 3})
 
-    def apply_trpo_SOI(self, s, a, q_app, soft, r):
+    def apply_trpo_SOI(self, s, a, q_app, soft, r, adv):
 
         #Use trajectory s -> a -> r to optimize policy in Trust-Region interval
         feed_dict = [[self.state, [s]],
                      [self.soft_out_k, [soft]],
                      [self.actions, [a]],
                      [self.q_return, [r]],
-                     [self.q_out, q_app]]
+                     [self.q_out, q_app],
+                     [self.A_k, adv]]
 
         self.trpo_opt.minimize(self.sess, feed_dict=feed_dict)
 
@@ -237,9 +239,9 @@ class TRPO():
                                             )
 
                     #Optimization Actor-Parameters
-                    #self.apply_trpo_SOI(traj_state, traj_action, q_approximated, soft, traj_reward)
-                    if episode > 50:
-                        self.apply_trpo_tf(soft, adv, traj_state, traj_action, 20)
+                    self.apply_trpo_SOI(traj_state, traj_action, q_approximated, soft, traj_reward, adv)
+                    #if episode > 50:
+                    #    self.apply_trpo_tf(soft, adv, traj_state, traj_action, 20)
 
                 if episode % self.slice == 0:
                     print("Episode: ", episode)

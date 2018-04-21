@@ -56,6 +56,7 @@ class ArmEnv(CoreEnv):
         self._tower_target_size = tower_target_size
         # checking for grid overflow
         assert cubes_cnt < size_x * size_y, "Cubes overflow the grid"
+        assert self._agents_num <= size_y, "Too many agents"
 
         self.reset()
 
@@ -98,37 +99,40 @@ class ArmEnv(CoreEnv):
         if not options:
             self._episode_length += 1
 
-        if a in self.MOVE_ACTIONS:
-            cube_dx, cube_dy = self.MOVE_ACTIONS[self.ACTIONS.DOWN]
-            cube_x, cube_y = self._arm_x + cube_dx, self._arm_y + cube_dy
-            if self._magnet_toggle and self.ok(cube_x, cube_y) and self._grid[cube_x][cube_y] == 1:
-                new_arm_x, new_arm_y = self._arm_x + self.MOVE_ACTIONS[a][0], self._arm_y + self.MOVE_ACTIONS[a][1]
-                new_cube_x, new_cube_y = new_arm_x + cube_dx, new_arm_y + cube_dy
-                self._grid[cube_x][cube_y] = 0
-                if self.ok_and_empty(new_arm_x, new_arm_y) and self.ok_and_empty(new_cube_x, new_cube_y):
-                    self._arm_x, self._arm_y = new_arm_x, new_arm_y
-                    self._grid[new_cube_x][new_cube_y] = 1
+        for num_agent, agent in enumerate(self.agents):
+            if a[num_agent] in self.MOVE_ACTIONS:
+                cube_dx, cube_dy = self.MOVE_ACTIONS[self.ACTIONS.DOWN]
+                cube_x, cube_y = agent.pos_x + cube_dx, agent.pos_y + cube_dy
+                if agent.toogle and self.ok(cube_x, cube_y) and self._grid[cube_x][cube_y] == 1:
+                    new_arm_x, new_arm_y = agent.pos_x + self.MOVE_ACTIONS[a[num_agent]][0], \
+                                           agent.pos_x + self.MOVE_ACTIONS[a[num_agent]][1]
+                    new_cube_x, new_cube_y = new_arm_x + cube_dx, new_arm_y + cube_dy
+                    self._grid[cube_x][cube_y] = 0
+                    if self.ok_and_empty(new_arm_x, new_arm_y) and self.ok_and_empty(new_cube_x, new_cube_y):
+                        agent.pos_x, agent.pos_y = new_arm_x, new_arm_y #!!!!!!!!!!!!! HERE
+                        self._grid[new_cube_x][new_cube_y] = 1
+                    else:
+                        self._grid[cube_x][cube_y] = 1
                 else:
-                    self._grid[cube_x][cube_y] = 1
-            else:
-                new_arm_x, new_arm_y = self._arm_x + self.MOVE_ACTIONS[a][0], self._arm_y + self.MOVE_ACTIONS[a][1]
-                if self.ok_and_empty(new_arm_x, new_arm_y):
-                    self._arm_x, self._arm_y = new_arm_x, new_arm_y
-                else:
-                    # cant move, mb -reward
-                    pass
-        elif a == self.ACTIONS.ON:
-            self._magnet_toggle = True
-        elif a == self.ACTIONS.OFF:
-            cube_dx, cube_dy = self.MOVE_ACTIONS[self.ACTIONS.DOWN]
-            cube_x, cube_y = self._arm_x + cube_dx, self._arm_y + cube_dy
-            if self.ok(cube_x, cube_y) and self._grid[cube_x, cube_y] == 1 and self._magnet_toggle:
-                new_cube_x, new_cube_y = cube_x + cube_dx, cube_y + cube_dy
-                while self.ok_and_empty(new_cube_x, new_cube_y):
-                    new_cube_x, new_cube_y = new_cube_x + cube_dx, new_cube_y + cube_dy
-                new_cube_x, new_cube_y = new_cube_x - cube_dx, new_cube_y - cube_dy
-                self._grid[new_cube_x, new_cube_y], self._grid[cube_x, cube_y] = self._grid[cube_x, cube_y], self._grid[new_cube_x, new_cube_y]
-                self._magnet_toggle = False
+                    new_arm_x, new_arm_y = agent.pos_x + self.MOVE_ACTIONS[a[num_agent]][0], \
+                                           agent.pos_y + self.MOVE_ACTIONS[a[num_agent]][1]
+                    if self.ok_and_empty(new_arm_x, new_arm_y):
+                        agent.pos_x, agent.pos_y = new_arm_x, new_arm_y
+                    else:
+                        # cant move, mb -reward
+                        pass
+            elif a[num_agent] == self.ACTIONS.ON:
+                agent.toogle = True
+            elif a[num_agent] == self.ACTIONS.OFF:
+                cube_dx, cube_dy = self.MOVE_ACTIONS[self.ACTIONS.DOWN]
+                cube_x, cube_y = agent.pos_x + cube_dx, agent.pos_y + cube_dy
+                if self.ok(cube_x, cube_y) and self._grid[cube_x, cube_y] == 1 and agent.toogle:
+                    new_cube_x, new_cube_y = cube_x + cube_dx, cube_y + cube_dy
+                    while self.ok_and_empty(new_cube_x, new_cube_y):
+                        new_cube_x, new_cube_y = new_cube_x + cube_dx, new_cube_y + cube_dy
+                    new_cube_x, new_cube_y = new_cube_x - cube_dx, new_cube_y - cube_dy
+                    self._grid[new_cube_x, new_cube_y], self._grid[cube_x, cube_y] = self._grid[cube_x, cube_y], self._grid[new_cube_x, new_cube_y]
+                    agent.toogle = False
 
         observation = self.grid_to_bin()
         self._current_state = observation
@@ -189,6 +193,14 @@ class ArmEnv(CoreEnv):
         outfile.write('\n')
 
 
-env = ArmEnv(4, 3, 2, 4, 200, 200, 0.0, 3)
-env.step()
+env = ArmEnv(size_x=4,
+             size_y=3,
+             agents_num=2,
+             cubes_cnt=4,
+             episode_max_length=200,
+             finish_reward=200,
+             action_minus_reward=0.0,
+             tower_target_size=3)
+
+env.step((2, 1))
 env.render()
