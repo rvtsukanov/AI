@@ -3,14 +3,17 @@ from tensorflow.contrib.opt import ScipyOptimizerInterface as SOI
 from tensorflow.contrib.distributions import kl_divergence as kl
 import numpy as np
 import gym
+import time
 import matplotlib.pyplot as plt
 from arm_env import ArmEnv
 
 
 class TRPO():
-    def __init__(self, gamma=0.99, lr=0.01, num_episodes=1000, num_steps=200, KL_delta=10 ** (-4)):
-        self.env = ArmEnv(size_x=4, size_y=3, cubes_cnt=4, episode_max_length=2000, finish_reward=200,
-                          action_minus_reward=0.0, tower_target_size=3)
+    def __init__(self, env, gamma=1, lr=0.01, num_episodes=1000, num_steps=200, KL_delta=10 ** (-4)):
+
+        #self.env = ArmEnv(size_x=4, size_y=3, cubes_cnt=4, episode_max_length=2000, finish_reward=200,
+        #                  action_minus_reward=0.0, tower_target_size=3)
+        self.env = env
         self.gamma = gamma
         self.lr = lr
         self.num_episodes = num_episodes
@@ -22,6 +25,8 @@ class TRPO():
         self.trajectory = []
         self.total_rew = []
         self.disc = 0
+        self.log_file = open('logs_' + str(time.time()) + '.txt', 'w+')
+
         self.sess = tf.Session()
 
     def build_graph(self):
@@ -31,8 +36,8 @@ class TRPO():
         self.q_estimation = tf.placeholder('float32', name="Q-EST")
         self.build_actor()
         self.build_critic()
-        #self.build_trpo_tf()
-        self.build_trpo_SOI()
+        self.build_trpo_tf()
+        #self.build_trpo_SOI()
 
 
     '''
@@ -104,7 +109,7 @@ class TRPO():
 
         # Choosing particular action "actions" and multiply by A_k
         #here was a mistake -> A instead of A_k
-        trpo_obj = -tf.reduce_mean(self.A_k * tf.gather(tf.exp(self.soft_out - self.soft_out_k), tf.squeeze(self.actions)))
+        trpo_obj = -tf.reduce_mean(self.A_k * tf.gather(tf.exp(self.soft_out - self.soft_out_k), self.actions))
 
         # KL(soft_out_k, soft_out) should be less than KL_delta
         constraints = [(-self.kl(self.soft_out_k, self.soft_out) + self.KL_delta)]
@@ -142,7 +147,7 @@ class TRPO():
         self.A = self.q_return - self.q_out #?
         self.D_KL = self.kl(self.soft_out, self.soft_out_k)
 
-        trpo_loss_1 = -tf.reduce_mean(self.A_k * tf.gather(tf.exp(self.soft_out - self.soft_out_k), self.actions))
+        trpo_loss_1 = -tf.reduce_mean(self.A_k * tf.exp(self.soft_out - self.soft_out_k))
         trpo_loss_2 = self.beta * self.D_KL
         trpo_loss_3 = self.eta * tf.square(tf.maximum(0.0, self.KL_delta - 2 * self.D_KL))
 
@@ -185,10 +190,12 @@ class TRPO():
             if not self.learn_flag:
                 a = np.random.choice(self.env.action_space.n,
                                      p=[1. / self.env.action_space.n for _ in range(self.env.action_space.n)])
-                print("probs: ", probs, self.learn_flag, "action: ", a)
+                #print("probs: ", probs, self.learn_flag, "action: ", a)
+                self.log_file.write('probs: ' + str(probs) + '\n')
             else:
                 a = np.random.choice(self.env.action_space.n, p=probs)
-                print("probs: ", probs, self.learn_flag, "action: ", a)
+                #print("probs: ", probs, self.learn_flag, "action: ", a)
+                self.log_file.write('probs: ' + str(probs) + '\n')
             new_state, reward, done, _ = self.env.step(a)
             self.total_rew.append(reward)
             self.trajectory.append((s, a, reward))
@@ -239,9 +246,9 @@ class TRPO():
                                             )
 
                     #Optimization Actor-Parameters
-                    self.apply_trpo_SOI(traj_state, traj_action, q_approximated, soft, traj_reward, adv)
-                    #if episode > 50:
-                    #    self.apply_trpo_tf(soft, adv, traj_state, traj_action, 20)
+                    #self.apply_trpo_SOI(traj_state, traj_action, q_approximated, soft, traj_reward, adv)
+                    if episode > 500:
+                        self.apply_trpo_tf(soft, adv, traj_state, traj_action, 20)
 
                 if episode % self.slice == 0:
                     print("Episode: ", episode)
@@ -252,6 +259,7 @@ class TRPO():
 
             plt.plot(self.success_episodes, self.successes)
             plt.show()
+            self.log_file.close()
             print(self.successes)
 
     @staticmethod
@@ -275,5 +283,6 @@ class TRPO():
             discounted_episode_rewards[t] = cumulative
         return discounted_episode_rewards
 
-trpo = TRPO(num_episodes=1000)
-trpo.learn()
+
+#trpo = TRPO(num_episodes=10000)
+#trpo.learn()
