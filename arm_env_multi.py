@@ -49,7 +49,8 @@ class ArmEnv(CoreEnv):
         self._grid = np.zeros(shape=(self._size_x, self._size_y), dtype=np.int32)
         self._agents_num = agents_num
         self.agents = []
-
+        for i in range(self._agents_num):
+            self.agents.append(Agent(i, 0, i, False))
         self._cubes_cnt = cubes_cnt
         self._episode_max_length = episode_max_length
         self._finish_reward = finish_reward
@@ -82,18 +83,6 @@ class ArmEnv(CoreEnv):
             s.append(int(i))
         return tuple(s)
 
-    def get_tower_height(self):
-        h = 0
-        for j in range(self._grid.shape[1]):
-            t = 0
-            for i in np.arange(self._grid.shape[0] - 1, 0, -1):
-                if self._grid[i, j] == 1 and self._grid[i - 1, j] == 0 \
-                        and (i + 1 == self._grid.shape[0] or self._grid[i + 1, j] == 1):
-                    t = self._grid.shape[0] - i
-                    break
-            if t > h:
-                h = t
-        return h
 
     def step(self, a, options=False):
         if len(a) != self._agents_num:
@@ -126,6 +115,7 @@ class ArmEnv(CoreEnv):
                         self._grid[new_cube_x][new_cube_y] = 1
                     else:
                         self._grid[cube_x][cube_y] = 1
+                        self._grid[agent.pos_x][agent.pos_y] = 2 + agent.toogle * 1
                 else:
                     new_arm_x, new_arm_y = agent.pos_x + self.MOVE_ACTIONS[a[num_agent]][0], \
                                            agent.pos_y + self.MOVE_ACTIONS[a[num_agent]][1]
@@ -150,7 +140,7 @@ class ArmEnv(CoreEnv):
                         new_cube_x, new_cube_y = new_cube_x + cube_dx, new_cube_y + cube_dy
                     new_cube_x, new_cube_y = new_cube_x - cube_dx, new_cube_y - cube_dy
                     self._grid[new_cube_x, new_cube_y], self._grid[cube_x, cube_y] = self._grid[cube_x, cube_y], self._grid[new_cube_x, new_cube_y]
-                    agent.toogle = False
+                agent.toogle = False
                 self._grid[agent.pos_x][agent.pos_y] = 2
 
         observation = self.grid_to_bin()
@@ -163,10 +153,9 @@ class ArmEnv(CoreEnv):
         # done (boolean): whether the episode has ended, in which case further step() calls will return undefined results
         # info (dict): contains auxiliary diagnostic information (helpful for debugging, and sometimes learning)
 
-        if self.get_tower_height() >
         if self.get_tower_height() == self._tower_target_size:
             self._done = True
-            reward += self._finish_reward * self.get_tower_height()
+            reward += self._finish_reward
             info = True
             return observation, reward, self._done, info
 
@@ -182,13 +171,16 @@ class ArmEnv(CoreEnv):
         pass
 
     # return: (states, observations)
+
     def reset(self):
         self._episode_length = 0
-
+        self._grid = np.zeros(shape=(self._size_x, self._size_y), dtype=np.int32)
         # creating agents
-        for i in range(self._agents_num):
-            self.agents.append(Agent(i, 0, i, False))
-            self._grid[0, i] = 2 + self.agents[i].toogle * 1
+        for agent in self.agents:
+            agent.pos_x = 0
+            agent.pos_y = agent.num
+            agent.toogle = False
+            self._grid[0, agent.num] = 2 + agent.toogle * 1
 
         self._done = False
         cubes_left = self._cubes_cnt
@@ -214,20 +206,65 @@ class ArmEnv(CoreEnv):
         outfile.write(str(out))
         outfile.write('\n')
 
-    def use_path(self, path={2: [3, 3, 2, 2, 4, 1, 2, 5]}):
+    def get_tower_height(self):
+        h = []
+        for j in range(self._grid.shape[1]):
+            t = 0
+            for i in np.arange(self._grid.shape[0] - 1, 0, -1):
+                if self._grid[i, j] == 1 and self._grid[i - 1, j] != 1\
+                        and (i + 1 == self._grid.shape[0] or self._grid[i + 1, j] == 1):
+                    t = self._grid.shape[0] - i
+                    h.append(t)
+                    break
+        h = np.array(h)
+        #TODO: Check wtf when agent is close to boxes, why sequence is empty
+        return max(h)
+
+    def use_path(self, path={2: [3, 3, 2, 2, 4, 1, 2, 5, 0]}):
         for ag in path:
             for act in path[ag]:
-                print(env.step((4, act)))
+                self.env.step((4, act))
 
-env = ArmEnv(size_x=5,
-             size_y=5,
-             agents_num=2,
-             cubes_cnt=7,
+
+
+'''
+
+===================
+TEST CONFIGURATION
+===================
+env = ArmEnv(size_x=4,
+             size_y=1,
+             agents_num=1,
+             cubes_cnt=1,
              episode_max_length=200,
              finish_reward=200,
              action_minus_reward=0.0,
-             tower_target_size=3)
+             tower_target_size=5)
 
+print(env.get_tower_height())
+env.reset()
+env.step([3])
+env.step([3])
+print(env.get_tower_height())
+env.render()
+
+act_dic = {0: 'left', 1: 'up', 2: 'right', 3: 'down', 4: 'on', 5: 'off'}
+
+for i in range(200):
+    if i > 50:
+        env.reset()
+        print('RESET!')
+    act = np.random.randint(6, size=1)
+    print(act)
+    env.step(act)
+    print(env.get_tower_height())
+    for ag in range(len(env.agents)):
+        print("Choosen action: ", act[ag], act_dic[act[ag]])
+    print('=====')
+    env.render()
+    print(env.agents[0].pos_x, env.agents[0].pos_y, env.agents[0].toogle)
+
+'''
 
 '''
 LEFT=0,
@@ -237,5 +274,4 @@ DOWN=3,
 ON=4,
 OFF=5
 '''
-env.use_path()
-env.render()
+
