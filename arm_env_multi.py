@@ -163,9 +163,10 @@ class ArmEnv(CoreEnv):
         # done (boolean): whether the episode has ended, in which case further step() calls will return undefined results
         # info (dict): contains auxiliary diagnostic information (helpful for debugging, and sometimes learning)
 
+        if self.get_tower_height() >
         if self.get_tower_height() == self._tower_target_size:
             self._done = True
-            reward += self._finish_reward
+            reward += self._finish_reward * self.get_tower_height()
             info = True
             return observation, reward, self._done, info
 
@@ -213,10 +214,10 @@ class ArmEnv(CoreEnv):
         outfile.write(str(out))
         outfile.write('\n')
 
-    def use_path(self, path={2: [3, 3, 2, 2, 4, 1, 2, 5, 0]}):
+    def use_path(self, path={2: [3, 3, 2, 2, 4, 1, 2, 5]}):
         for ag in path:
             for act in path[ag]:
-                env.step((4, act))
+                print(env.step((4, act)))
 
 env = ArmEnv(size_x=5,
              size_y=5,
@@ -236,4 +237,5 @@ DOWN=3,
 ON=4,
 OFF=5
 '''
-
+env.use_path()
+env.render()
