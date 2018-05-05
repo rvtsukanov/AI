@@ -9,7 +9,7 @@ from arm_env import ArmEnv
 
 
 class MultiAC():
-    def __init__(self, env, gamma=1, lr=0.01, num_episodes=1000, num_steps=200, KL_delta=10 ** (-4)):
+    def __init__(self, env, gamma=1, lr=0.001, num_episodes=1000, num_steps=200, KL_delta=10 ** (-4)):
 
         #self.env = ArmEnv(size_x=4, size_y=3, cubes_cnt=4, episode_max_length=2000, finish_reward=200,
         #                  action_minus_reward=0.0, tower_target_size=3)
