@@ -1,4 +1,4 @@
-from trpo_class_multi import MultiAC
+from ac_class_batch_multi import MultiAC
 from arm_env_multi import ArmEnv
 
 env = ArmEnv(size_x=5,

@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from arm_env import ArmEnv
 
 
-class AC:
+class MultiAC():
     def __init__(self, env, gamma=1, lr=0.001, num_episodes=1000, num_steps=200, KL_delta=10 ** (-4)):
 
         #self.env = ArmEnv(size_x=4, size_y=3, cubes_cnt=4, episode_max_length=2000, finish_reward=200,
@@ -20,24 +20,17 @@ class AC:
         self.num_steps = num_steps
         self.KL_delta = KL_delta
         self.success_counter = 0
+        self.actors = []
         self.build_graph()
         self.obs_len = len(self.env.reset())
         self.trajectory = []
         self.total_rew = []
-        self.batch_size = 5
         self.disc = 0
         self.log_file = open('./logs/logs_' + str(time.time()) + '.txt', 'w+')
 
         self.sess = tf.Session()
 
     def build_graph(self):
-
-        '''
-        =======
-        BATCHES
-        =======
-        '''
-
         tf.reset_default_graph()
 
         # building graph:
@@ -46,14 +39,14 @@ class AC:
         # S = [NUM_OF_STEPS, DIMENSION]
         # A = [NUM_OF_STEPS, 1]
 
+        #with tf.variable_scope("Actions", reuse=tf.AUTO_REUSE): ????????????
+
+
         self.S = tf.placeholder('float64', shape=[None, len(self.env.reset())], name='S')
         self.A = tf.placeholder('int64', name='A')
         self.R = tf.placeholder('float64', name='R')
         self.build_actor()
         self.build_critic()
-
-
-        #TODO: Redo action number -> one hot ---- NO, BECAUSE LOSS WILL NOT WORK
 
 
     '''
@@ -62,27 +55,31 @@ class AC:
     ============================
     '''
     def build_actor(self):
-        self.inp = tf.layers.dense(
-            self.S,
-            10, # ??
-            name="ACTOR_INPUT",
-            kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.1),
-            bias_initializer=tf.initializers.constant(0)
-        )
+        with tf.variable_scope("Policies", reuse=tf.AUTO_REUSE):
+            for i in range(self.env._agents_num):
+                inp = tf.layers.dense(
+                    self.S,
+                    10,
+                    name="ACTOR_INPUT",
+                    kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.1),
+                    bias_initializer=tf.initializers.constant(0)
+                )
 
-        self.out = tf.layers.dense(
-            self.inp,
-            self.env.action_space.n,
-            kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.1),
-            bias_initializer=tf.initializers.constant(0)
-        )
+                out = tf.layers.dense(
+                    inp,
+                    self.env.action_space.n,
+                    kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.1),
+                    bias_initializer=tf.initializers.constant(0)
+                )
 
-        self.soft_out = tf.nn.softmax(self.out)
+                soft_out = tf.nn.softmax(out)
 
-        # Batch loss
-        wnl = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.out, labels=self.A)
-        ls = tf.reduce_mean(tf.multiply(self.R, wnl))
-        self.opt = tf.train.AdamOptimizer(learning_rate=0.001).minimize(ls)
+                wnl = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=out, labels=self.A)
+                ls = tf.reduce_mean(tf.multiply(self.R, wnl))
+                opt = tf.train.AdamOptimizer(learning_rate=0.001).minimize(ls)
+
+                #TODO: Normal view of actors tuple
+                self.actors.append((inp, soft_out, opt))
 
 
     '''
@@ -94,8 +91,9 @@ class AC:
 
         self.q_return = tf.placeholder('float32', name="Q-Return")  # sum of rewards on rest of traj
         self.traj_len = tf.placeholder('int32', name='Traj_Len')
+        conc = tf.concat((self.S, tf.reshape([tf.cast(self.A, tf.float64)], shape=(self.traj_len, 2))), axis=1)
 
-        conc = tf.concat((self.S, tf.reshape([tf.cast(self.A, tf.float64)], shape=(self.traj_len, 1))), axis=1)
+
         self.q_inp = tf.layers.dense(
             conc,
             10,
@@ -122,20 +120,19 @@ class AC:
         self.total_rew = []
 
         for step in range(self.num_steps):
-            output = self.sess.run([self.soft_out], feed_dict={self.S: [s]})
-            probs = output[0][0]
-            if not self.learn_flag:
-                a = np.random.choice(self.env.action_space.n,
-                                     p=[1. / self.env.action_space.n for _ in range(self.env.action_space.n)])
-                #print("probs: ", probs, self.learn_flag, "action: ", a)
-                self.log_file.write('probs: ' + str(probs) + '\n')
-            else:
+            multi_actions = []
+            for i in range(self.env._agents_num):
+
+                # "1" in actors is soft_out
+                output = self.sess.run([self.actors[i][1]], feed_dict={self.S: [s]})
+                probs = output[0][0]
                 a = np.random.choice(self.env.action_space.n, p=probs)
-                #print("probs: ", probs, self.learn_flag, "action: ", a)
-                self.log_file.write('probs: ' + str(probs) + ' step:' + str(step) + '\n')
-            new_state, reward, done, _ = self.env.step(a)
+                #print("probs: ", probs, self.learn_flag, "action: ", a, 'agent:', i)
+                #self.log_file.write('probs: ' + str(probs) + '\n')
+                multi_actions.append(a)
+            new_state, reward, done, _ = self.env.step(multi_actions)
             self.total_rew.append(reward)
-            self.trajectory.append((s, a, reward))
+            self.trajectory.append((s, multi_actions, reward))
 
             if done:
                 if reward != 0:
@@ -149,7 +146,6 @@ class AC:
         print('====================== end of episode {} ======================'.format(episode))
 
     def learn(self):
-
         self.learn_flag = False
         with self.sess:
             self.sess.run(tf.global_variables_initializer())
@@ -160,8 +156,11 @@ class AC:
             self.slice = 10
             self.success_counter = 0
 
+
+
             for episode in range(self.num_episodes):
                 self.roll_trajectory(episode)
+                print(self.trajectory)
 
                 # Making learning sets
                 S_traj = []
@@ -173,8 +172,9 @@ class AC:
                     A_traj.append(item[1])
                     R_traj.append(item[2])
 
-
                 disc = self.discount_and_norm_rewards(R_traj, gamma=1)
+
+
 
                 #Learning Critic
                 q_approximated, _ = self.sess.run([self.q_out, self.q_opt],
@@ -184,15 +184,13 @@ class AC:
                                                              self.traj_len: len(R_traj)}
                                                   )
 
-                #Learning Actor
-                _ = self.sess.run([self.opt],
-                                        feed_dict={self.S: S_traj,
-                                                   self.A: A_traj,
-                                                   self.R: q_approximated}
-                                        )
-
-                #Optimization Actor-Parameters
-                #self.apply_trpo_SOI(traj_state, traj_action, q_approximated, soft, traj_reward, adv)
+                #Learning Actors
+                for i in range(self.env._agents_num):
+                    _ = self.sess.run([self.actors[i][2]],
+                                      feed_dict={self.S: S_traj,
+                                                 self.A: np.array(A_traj)[:, i],
+                                                 self.R: q_approximated}
+                                      )
 
                 if episode % self.slice == 0:
                     print("Episode: ", episode)
@@ -226,8 +224,3 @@ class AC:
             cumulative = cumulative * gamma + episode_rewards[t]
             discounted_episode_rewards[t] = cumulative
         return discounted_episode_rewards
-
-
-trpo = AC(ArmEnv(size_x=4, size_y=3, cubes_cnt=4, episode_max_length=2000, finish_reward=200,
-                 action_minus_reward=0.0, tower_target_size=3), num_episodes=10000)
-trpo.learn()
