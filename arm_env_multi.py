@@ -223,38 +223,60 @@ class ArmEnv(CoreEnv):
     def use_path(self, path={2: [3, 3, 2, 2, 4, 1, 2, 5, 0]}):
         for ag in path:
             for act in path[ag]:
-                self.env.step((4, act))
+                self.step((4, act))
+
 
 
 
 '''
-
 ===================
 TEST CONFIGURATION
 ===================
-env = ArmEnv(size_x=4,
-             size_y=1,
-             agents_num=1,
-             cubes_cnt=1,
+'''
+
+env = ArmEnv(size_x=5,
+             size_y=5,
+             agents_num=2,
+             cubes_cnt=5,
              episode_max_length=200,
              finish_reward=200,
              action_minus_reward=0.0,
-             tower_target_size=5)
+             tower_target_size=3)
 
-print(env.get_tower_height())
-env.reset()
-env.step([3])
-env.step([3])
-print(env.get_tower_height())
+env.step([3, 3])
+env.step([3, 3])
+env.step([3, 3])
+env.render()
+env.step([0, 4])
+env.render()
+env.step([0, 1])
+env.step([2, 1])
+env.render()
+env.step([2, 2])
+env.step([2, 1])
+env.step([1, 1])
+env.step([1, 1])
+env.step([5, 5])
+env.step([3, 3])
+env.step([2, 2])
+
 env.render()
 
-act_dic = {0: 'left', 1: 'up', 2: 'right', 3: 'down', 4: 'on', 5: 'off'}
+#print(env.get_tower_height())
+#env.reset()
+#env.step([3, 2])
+#env.step([3, 2])
+#print(env.get_tower_height())
+#env.render()
 
+#act_dic = {0: 'left', 1: 'up', 2: 'right', 3: 'down', 4: 'on', 5: 'off'}
+
+'''
 for i in range(200):
     if i > 50:
         env.reset()
         print('RESET!')
-    act = np.random.randint(6, size=1)
+    act = np.random.randint(6, size=2)
     print(act)
     env.step(act)
     print(env.get_tower_height())
@@ -263,8 +285,8 @@ for i in range(200):
     print('=====')
     env.render()
     print(env.agents[0].pos_x, env.agents[0].pos_y, env.agents[0].toogle)
-
 '''
+
 
 '''
 LEFT=0,
