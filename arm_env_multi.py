@@ -88,8 +88,7 @@ class ArmEnv(CoreEnv):
         if len(a) != self._agents_num:
             raise ValueError("Action space dimension must be equal to number of agents")
 
-        if not options:
-            self._episode_length += 1
+        self._episode_length += 1
 
         for num_agent, agent in enumerate(self.agents):
             if a[num_agent] in self.MOVE_ACTIONS:
@@ -107,8 +106,10 @@ class ArmEnv(CoreEnv):
                     new_arm_x, new_arm_y = agent.pos_x + self.MOVE_ACTIONS[a[num_agent]][0], \
                                            agent.pos_y + self.MOVE_ACTIONS[a[num_agent]][1]
                     new_cube_x, new_cube_y = new_arm_x + cube_dx, new_arm_y + cube_dy
+
                     self._grid[cube_x][cube_y] = 0
                     self._grid[agent.pos_x][agent.pos_y] = 0
+
                     if self.ok_and_empty(new_arm_x, new_arm_y) and self.ok_and_empty(new_cube_x, new_cube_y):
                         agent.pos_x, agent.pos_y = new_arm_x, new_arm_y
                         self._grid[new_arm_x][new_arm_y] = 2 + agent.toogle * 1
@@ -223,38 +224,62 @@ class ArmEnv(CoreEnv):
     def use_path(self, path={2: [3, 3, 2, 2, 4, 1, 2, 5, 0]}):
         for ag in path:
             for act in path[ag]:
-                self.env.step((4, act))
+                self.step((4, act))
+
 
 
 
 '''
-
 ===================
 TEST CONFIGURATION
 ===================
-env = ArmEnv(size_x=4,
-             size_y=1,
-             agents_num=1,
-             cubes_cnt=1,
+'''
+
+env = ArmEnv(size_x=5,
+             size_y=5,
+             agents_num=2,
+             cubes_cnt=5,
              episode_max_length=200,
              finish_reward=200,
              action_minus_reward=0.0,
-             tower_target_size=5)
+             tower_target_size=3)
 
-print(env.get_tower_height())
-env.reset()
-env.step([3])
-env.step([3])
-print(env.get_tower_height())
+env.step([3, 3])
+env.step([3, 3])
+env.step([3, 3])
+env.render()
+env.step([0, 4])
+env.render()
+env.step([0, 1])
+env.step([2, 1])
+env.render()
+env.step([2, 2])
+env.step([2, 1])
+env.step([1, 1])
+env.step([1, 1])
+env.step([5, 5])
+env.step([3, 3])
+#env.step([2, 2])
+
+
+
 env.render()
 
-act_dic = {0: 'left', 1: 'up', 2: 'right', 3: 'down', 4: 'on', 5: 'off'}
+#print(env.get_tower_height())
+#env.reset()
+#env.step([3, 2])
+#env.step([3, 2])
+#print(env.get_tower_height())
+#env.render()
 
+#act_dic = {0: 'left', 1: 'up', 2: 'right', 3: 'down', 4: 'on', 5: 'off'}
+
+'''
 for i in range(200):
     if i > 50:
         env.reset()
         print('RESET!')
-    act = np.random.randint(6, size=1)
+    act = np.random.randint(6, size=2)
     print(act)
     env.step(act)
     print(env.get_tower_height())
@@ -263,8 +288,8 @@ for i in range(200):
     print('=====')
     env.render()
     print(env.agents[0].pos_x, env.agents[0].pos_y, env.agents[0].toogle)
-
 '''
+
 
 '''
 LEFT=0,
