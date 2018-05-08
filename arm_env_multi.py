@@ -88,8 +88,7 @@ class ArmEnv(CoreEnv):
         if len(a) != self._agents_num:
             raise ValueError("Action space dimension must be equal to number of agents")
 
-        if not options:
-            self._episode_length += 1
+        self._episode_length += 1
 
         for num_agent, agent in enumerate(self.agents):
             if a[num_agent] in self.MOVE_ACTIONS:
@@ -107,8 +106,10 @@ class ArmEnv(CoreEnv):
                     new_arm_x, new_arm_y = agent.pos_x + self.MOVE_ACTIONS[a[num_agent]][0], \
                                            agent.pos_y + self.MOVE_ACTIONS[a[num_agent]][1]
                     new_cube_x, new_cube_y = new_arm_x + cube_dx, new_arm_y + cube_dy
+
                     self._grid[cube_x][cube_y] = 0
                     self._grid[agent.pos_x][agent.pos_y] = 0
+
                     if self.ok_and_empty(new_arm_x, new_arm_y) and self.ok_and_empty(new_cube_x, new_cube_y):
                         agent.pos_x, agent.pos_y = new_arm_x, new_arm_y
                         self._grid[new_arm_x][new_arm_y] = 2 + agent.toogle * 1
@@ -258,7 +259,9 @@ env.step([1, 1])
 env.step([1, 1])
 env.step([5, 5])
 env.step([3, 3])
-env.step([2, 2])
+#env.step([2, 2])
+
+
 
 env.render()
 
