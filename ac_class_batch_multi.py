@@ -160,7 +160,6 @@ class MultiAC():
 
             for episode in range(self.num_episodes):
                 self.roll_trajectory(episode)
-                print(self.trajectory)
 
                 # Making learning sets
                 S_traj = []
