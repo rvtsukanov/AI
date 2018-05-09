@@ -245,16 +245,21 @@ class ArmEnv(CoreEnv):
     def get_tower_height(self):
         h = []
         for j in range(self._grid.shape[1]):
+            if self._grid[4, j] != 1:
+                continue
             t = 0
             for i in np.arange(self._grid.shape[0] - 1, 0, -1):
-                if self._grid[i, j] == 1 and self._grid[i - 1, j] != 1\
-                        and (i + 1 == self._grid.shape[0] or self._grid[i + 1, j] == 1):
+                if (self._grid[i, j] == 1 and self._grid[i - 1, j] != 1\
+                        and (i + 1 == self._grid.shape[0] or self._grid[i + 1, j] == 1)):
                     t = self._grid.shape[0] - i
                     h.append(t)
                     break
         h = np.array(h)
-        #TODO: Check wtf when agent is close to boxes, why sequence is empty
-        return max(h)
+        if h.size == 0:
+            return 0
+        else:
+            return max(h)
+
 
     def use_path(self, path={2: [3, 3, 2, 2, 4, 1, 2, 5, 0]}):
         for ag in path:
@@ -280,6 +285,17 @@ env = ArmEnv(size_x=5,
              tower_target_size=3)
 
 
+env._grid[4, 3] = 0
+env._grid[4, 2] = 0
+env._grid[1, 4] = 2
+env._grid[2, 4] = 1
+env._grid[3, 4] = 1
+env._grid[4, 4] = 2
+
+print(env.get_tower_height())
+env.render()
+
+'''
 
 env.step([3, 3])
 env.step([3, 3])
@@ -307,7 +323,7 @@ env.step([2, 2])
 
 env.render()
 
-
+'''
 
 #print(env.get_tower_height())
 #env.reset()
