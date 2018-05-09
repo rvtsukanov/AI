@@ -93,10 +93,12 @@ class ArmEnv(CoreEnv):
         for num_agent, agent in enumerate(self.agents):
             if a[num_agent] in self.MOVE_ACTIONS:
                 cube_dx, cube_dy = self.MOVE_ACTIONS[self.ACTIONS.DOWN]
+                upx, upy = self.MOVE_ACTIONS[self.ACTIONS.UP]
 
                 #calculate -> is there box under the agent?
 
                 cube_x, cube_y = agent.pos_x + cube_dx, agent.pos_y + cube_dy
+                up_cube_x, up_cube_y = agent.pos_x + upx, agent.pos_y + upy
 
                 #check is there magneted box downside?
                 # if there is -> change both coordinats: agend and box
@@ -110,14 +112,21 @@ class ArmEnv(CoreEnv):
                     self._grid[cube_x][cube_y] = 0
                     self._grid[agent.pos_x][agent.pos_y] = 0
 
+                    # if everything is ok -> confirm changes
                     if self.ok_and_empty(new_arm_x, new_arm_y) and self.ok_and_empty(new_cube_x, new_cube_y):
                         agent.pos_x, agent.pos_y = new_arm_x, new_arm_y
                         self._grid[new_arm_x][new_arm_y] = 2 + agent.toogle * 1
                         self._grid[new_cube_x][new_cube_y] = 1
+
+                    # if not -> return to default
                     else:
                         self._grid[cube_x][cube_y] = 1
                         self._grid[agent.pos_x][agent.pos_y] = 2 + agent.toogle * 1
                 else:
+                    # if there is not magneted box down side -> 2 options
+                    # 1st: there is
+                    # 2nd:
+
                     new_arm_x, new_arm_y = agent.pos_x + self.MOVE_ACTIONS[a[num_agent]][0], \
                                            agent.pos_y + self.MOVE_ACTIONS[a[num_agent]][1]
                     if self.ok_and_empty(new_arm_x, new_arm_y):
@@ -128,9 +137,13 @@ class ArmEnv(CoreEnv):
                         # cant move, mb -reward
                         pass
 
+            # Magnet actions
+
             elif a[num_agent] == self.ACTIONS.ON:
                 agent.toogle = True
                 self._grid[agent.pos_x][agent.pos_y] = 3
+
+            # Drop box down, if it was caught and magnet turned off
 
             elif a[num_agent] == self.ACTIONS.OFF:
                 cube_dx, cube_dy = self.MOVE_ACTIONS[self.ACTIONS.DOWN]
@@ -144,6 +157,8 @@ class ArmEnv(CoreEnv):
                 agent.toogle = False
                 self._grid[agent.pos_x][agent.pos_y] = 2
 
+
+        self.check_free_boxes()
         observation = self.grid_to_bin()
         self._current_state = observation
         reward = self._action_minus_reward
@@ -172,6 +187,26 @@ class ArmEnv(CoreEnv):
         pass
 
     # return: (states, observations)
+    def check_free_boxes(self):
+        for i_y in range(1, self._grid.shape[1]):
+            for i_x in range(self._grid.shape[0] - 1):
+                if self._grid[i_x, i_y] == 1 and self._grid[i_x + 1, i_y] == 0 \
+                        and not self._grid[i_x - 1, i_y] == 3:
+                    self.fall(i_x, i_y)
+
+    def fall(self, x, y):
+        # only boxes should be here!
+        if self._grid[x, y] == 1:
+
+            cube_dx, cube_dy = self.MOVE_ACTIONS[self.ACTIONS.DOWN]
+            cube_x, cube_y = x + cube_dx, y + cube_dy
+            new_cube_x, new_cube_y = cube_x + cube_dx, cube_y + cube_dy
+            while self.ok_and_empty(new_cube_x, new_cube_y):
+                new_cube_x, new_cube_y = new_cube_x + cube_dx, new_cube_y + cube_dy
+            new_cube_x, new_cube_y = new_cube_x - cube_dx, new_cube_y - cube_dy
+            self._grid[new_cube_x, new_cube_y], self._grid[x, y] = self._grid[x, y], self._grid[
+                new_cube_x, new_cube_y]
+
 
     def reset(self):
         self._episode_length = 0
@@ -244,6 +279,8 @@ env = ArmEnv(size_x=5,
              action_minus_reward=0.0,
              tower_target_size=3)
 
+
+
 env.step([3, 3])
 env.step([3, 3])
 env.step([3, 3])
@@ -251,19 +288,26 @@ env.render()
 env.step([0, 4])
 env.render()
 env.step([0, 1])
+env.render()
 env.step([2, 1])
 env.render()
 env.step([2, 2])
+env.render()
 env.step([2, 1])
+env.render()
 env.step([1, 1])
+env.render()
 env.step([1, 1])
+env.render()
 env.step([5, 5])
-env.step([3, 3])
-#env.step([2, 2])
-
-
+env.render()
+env.step([2, 2])
+env.render()
+env.step([2, 2])
 
 env.render()
+
+
 
 #print(env.get_tower_height())
 #env.reset()
