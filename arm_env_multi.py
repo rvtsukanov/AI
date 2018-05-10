@@ -245,7 +245,7 @@ class ArmEnv(CoreEnv):
     def get_tower_height(self):
         h = []
         for j in range(self._grid.shape[1]):
-            if self._grid[4, j] != 1:
+            if self._grid[self._grid.shape[0]-1, j] != 1:
                 continue
             t = 0
             for i in np.arange(self._grid.shape[0] - 1, 0, -1):
@@ -284,18 +284,17 @@ env = ArmEnv(size_x=5,
              action_minus_reward=0.0,
              tower_target_size=3)
 
-
+'''
 env._grid[4, 3] = 0
 env._grid[4, 2] = 0
 env._grid[1, 4] = 2
 env._grid[2, 4] = 1
 env._grid[3, 4] = 1
 env._grid[4, 4] = 2
-
-print(env.get_tower_height())
-env.render()
+'''
 
 '''
+env.render()
 
 env.step([3, 3])
 env.step([3, 3])
@@ -322,6 +321,7 @@ env.render()
 env.step([2, 2])
 
 env.render()
+print(env.get_tower_height())
 
 '''
 
