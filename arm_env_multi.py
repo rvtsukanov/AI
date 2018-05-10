@@ -104,7 +104,10 @@ class ArmEnv(CoreEnv):
                 # if there is -> change both coordinats: agend and box
                 # if not      -> only agent's
 
-                if agent.toogle and self.ok(cube_x, cube_y) and self.is_cube(cube_x, cube_y):
+                # Also, check, can particular agent move box of this type?
+                if agent.toogle and agent.typ == self._grid[cube_x, cube_y] \
+                        and self.ok(cube_x, cube_y) and self.is_cube(cube_x, cube_y):
+
                     new_arm_x, new_arm_y = agent.pos_x + self.MOVE_ACTIONS[a[num_agent]][0], \
                                            agent.pos_y + self.MOVE_ACTIONS[a[num_agent]][1]
                     new_cube_x, new_cube_y = new_arm_x + cube_dx, new_arm_y + cube_dy
@@ -206,10 +209,11 @@ class ArmEnv(CoreEnv):
         self._episode_length = 0
         self._grid = np.zeros(shape=(self._size_x, self._size_y), dtype=np.int32)
         # creating agents
-        for agent in self.agents:
+        for n, agent in enumerate(self.agents):
             agent.pos_x = 0
             agent.pos_y = agent.num
             agent.toogle = False
+            agent.typ = self.cube_type[n % len(self.cube_type)]
             self._grid[0, agent.num] = 2 + agent.toogle * 1
 
         self._done = False
@@ -262,13 +266,31 @@ class ArmEnv(CoreEnv):
 
 
 
+env = ArmEnv(size_x=5,
+             size_y=1,
+             agents_num=1,
+             cubes_cnt=2,
+             episode_max_length=200,
+             finish_reward=200,
+             action_minus_reward=0.0,
+             tower_target_size=3)
+
+'''
+env.render()
+env._grid[3, 0] = 1
+env.step([3])
+env.step([3])
+env.step([4])
+env.step([1])
+env.render()
+'''
 
 '''
 ===================
 TEST CONFIGURATION
 ===================
 '''
-
+'''
 env = ArmEnv(size_x=5,
              size_y=5,
              agents_num=2,
@@ -278,7 +300,7 @@ env = ArmEnv(size_x=5,
              action_minus_reward=0.0,
              tower_target_size=3)
 
-#print(env.get_tower_height())
+print(env.get_tower_height())
 env.render()
 
 env.step([3, 3])
@@ -306,10 +328,9 @@ env.render()
 env.step([2, 2])
 
 env.render()
+print(env.get_tower_height())
 
-
-
-#print(env.get_tower_height())
+'''
 #env.reset()
 #env.step([3, 2])
 #env.step([3, 2])
