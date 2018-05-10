@@ -2,6 +2,7 @@ from collections import namedtuple
 
 import numpy as np
 import sys
+from termcolor import colored
 
 from gym import spaces
 
@@ -16,11 +17,12 @@ def up_scaler(grid, up_size):
 
 
 class Agent():
-    def __init__(self, num, pos_x, pos_y, magnet_toogle=False):
+    def __init__(self, num, pos_x, pos_y, typ, magnet_toogle=False):
         self.num = num
         self.pos_x = pos_x
         self.pos_y = pos_y
         self.toogle = magnet_toogle
+        self.typ = typ
 
 
 class ArmEnv(CoreEnv):
@@ -52,6 +54,7 @@ class ArmEnv(CoreEnv):
         for i in range(self._agents_num):
             self.agents.append(Agent(i, 0, i, False))
         self._cubes_cnt = cubes_cnt
+        self.cube_type = [1, 7]
         self._episode_max_length = episode_max_length
         self._finish_reward = finish_reward
         self._action_minus_reward = action_minus_reward
@@ -63,6 +66,14 @@ class ArmEnv(CoreEnv):
         self.action_space = spaces.Discrete(6)
         self.grid_to_id = {}
 
+
+    def is_cube(self, x, y):
+        if self._grid[x ,y] in self.cube_type:
+            return True
+        else:
+            return False
+
+
     def ok(self, x, y):
         return 0 <= x < self._grid.shape[0] and 0 <= y < self._grid.shape[1]
 
@@ -71,13 +82,6 @@ class ArmEnv(CoreEnv):
 
     def grid_to_bin(self):
         grid = np.array(self._grid, copy=True)
-        '''
-        for agent in self.agents:
-            if not agent.toogle:
-                grid[agent.pos_x, agent.pos_y] = 2
-            else:
-                grid[agent.pos_x, agent.pos_y] = 3
-        '''
         s = []
         for i in np.nditer(grid):
             s.append(int(i))
@@ -86,28 +90,28 @@ class ArmEnv(CoreEnv):
 
     def step(self, a, options=False):
         if len(a) != self._agents_num:
-            raise ValueError("Action space dimension must be equal to number of agents")
+            raise ValueError("Action space dimension must be equal to the number of agents")
 
         self._episode_length += 1
 
         for num_agent, agent in enumerate(self.agents):
             if a[num_agent] in self.MOVE_ACTIONS:
                 cube_dx, cube_dy = self.MOVE_ACTIONS[self.ACTIONS.DOWN]
-                upx, upy = self.MOVE_ACTIONS[self.ACTIONS.UP]
-
-                #calculate -> is there box under the agent?
-
                 cube_x, cube_y = agent.pos_x + cube_dx, agent.pos_y + cube_dy
-                up_cube_x, up_cube_y = agent.pos_x + upx, agent.pos_y + upy
+                current_box_type = self._grid[cube_x, cube_y]
 
                 #check is there magneted box downside?
                 # if there is -> change both coordinats: agend and box
                 # if not      -> only agent's
 
-                if agent.toogle and self.ok(cube_x, cube_y) and self._grid[cube_x][cube_y] == 1:
+                # Also, check, can particular agent move box of this type?
+                if agent.toogle and agent.typ == self._grid[cube_x, cube_y] \
+                        and self.ok(cube_x, cube_y) and self.is_cube(cube_x, cube_y):
+
                     new_arm_x, new_arm_y = agent.pos_x + self.MOVE_ACTIONS[a[num_agent]][0], \
                                            agent.pos_y + self.MOVE_ACTIONS[a[num_agent]][1]
                     new_cube_x, new_cube_y = new_arm_x + cube_dx, new_arm_y + cube_dy
+
 
                     self._grid[cube_x][cube_y] = 0
                     self._grid[agent.pos_x][agent.pos_y] = 0
@@ -116,19 +120,16 @@ class ArmEnv(CoreEnv):
                     if self.ok_and_empty(new_arm_x, new_arm_y) and self.ok_and_empty(new_cube_x, new_cube_y):
                         agent.pos_x, agent.pos_y = new_arm_x, new_arm_y
                         self._grid[new_arm_x][new_arm_y] = 2 + agent.toogle * 1
-                        self._grid[new_cube_x][new_cube_y] = 1
+                        self._grid[new_cube_x][new_cube_y] = current_box_type
 
                     # if not -> return to default
                     else:
-                        self._grid[cube_x][cube_y] = 1
+                        self._grid[cube_x][cube_y] = current_box_type
                         self._grid[agent.pos_x][agent.pos_y] = 2 + agent.toogle * 1
                 else:
-                    # if there is not magneted box down side -> 2 options
-                    # 1st: there is
-                    # 2nd:
-
                     new_arm_x, new_arm_y = agent.pos_x + self.MOVE_ACTIONS[a[num_agent]][0], \
                                            agent.pos_y + self.MOVE_ACTIONS[a[num_agent]][1]
+
                     if self.ok_and_empty(new_arm_x, new_arm_y):
                         self._grid[agent.pos_x][agent.pos_y] = 0
                         self._grid[new_arm_x][new_arm_y] = 2 + agent.toogle * 1
@@ -143,12 +144,13 @@ class ArmEnv(CoreEnv):
                 agent.toogle = True
                 self._grid[agent.pos_x][agent.pos_y] = 3
 
-            # Drop box down, if it was caught and magnet turned off
+            # Drop box down, if it was caught and the magnet was turned off
 
             elif a[num_agent] == self.ACTIONS.OFF:
                 cube_dx, cube_dy = self.MOVE_ACTIONS[self.ACTIONS.DOWN]
                 cube_x, cube_y = agent.pos_x + cube_dx, agent.pos_y + cube_dy
-                if self.ok(cube_x, cube_y) and self._grid[cube_x, cube_y] == 1 and agent.toogle:
+
+                if self.ok(cube_x, cube_y) and self.is_cube(cube_x, cube_y) and agent.toogle:
                     new_cube_x, new_cube_y = cube_x + cube_dx, cube_y + cube_dy
                     while self.ok_and_empty(new_cube_x, new_cube_y):
                         new_cube_x, new_cube_y = new_cube_x + cube_dx, new_cube_y + cube_dy
@@ -157,17 +159,13 @@ class ArmEnv(CoreEnv):
                 agent.toogle = False
                 self._grid[agent.pos_x][agent.pos_y] = 2
 
-
+        # check if there are boxes which are not on the ground
         self.check_free_boxes()
+
         observation = self.grid_to_bin()
         self._current_state = observation
         reward = self._action_minus_reward
         info = None
-        # self.render_to_image()
-        # observation (object): agent's observation of the current environment
-        # reward (float) : amount of reward returned after previous action
-        # done (boolean): whether the episode has ended, in which case further step() calls will return undefined results
-        # info (dict): contains auxiliary diagnostic information (helpful for debugging, and sometimes learning)
 
         if self.get_tower_height() == self._tower_target_size:
             self._done = True
@@ -190,14 +188,13 @@ class ArmEnv(CoreEnv):
     def check_free_boxes(self):
         for i_y in range(1, self._grid.shape[1]):
             for i_x in range(self._grid.shape[0] - 1):
-                if self._grid[i_x, i_y] == 1 and self._grid[i_x + 1, i_y] == 0 \
+                if self.is_cube(i_x, i_y) and self._grid[i_x + 1, i_y] == 0 \
                         and not self._grid[i_x - 1, i_y] == 3:
                     self.fall(i_x, i_y)
 
     def fall(self, x, y):
         # only boxes should be here!
-        if self._grid[x, y] == 1:
-
+        if self.is_cube(x, y):
             cube_dx, cube_dy = self.MOVE_ACTIONS[self.ACTIONS.DOWN]
             cube_x, cube_y = x + cube_dx, y + cube_dy
             new_cube_x, new_cube_y = cube_x + cube_dx, cube_y + cube_dy
@@ -212,10 +209,11 @@ class ArmEnv(CoreEnv):
         self._episode_length = 0
         self._grid = np.zeros(shape=(self._size_x, self._size_y), dtype=np.int32)
         # creating agents
-        for agent in self.agents:
+        for n, agent in enumerate(self.agents):
             agent.pos_x = 0
             agent.pos_y = agent.num
             agent.toogle = False
+            agent.typ = self.cube_type[n % len(self.cube_type)]
             self._grid[0, agent.num] = 2 + agent.toogle * 1
 
         self._done = False
@@ -224,7 +222,7 @@ class ArmEnv(CoreEnv):
             if cubes_left == 0:
                 break
             cubes_left -= 1
-            self._grid[x, y] = 1
+            self._grid[x, y] = self.cube_type[cubes_left % len(self.cube_type)]
 
         self._current_state = self.grid_to_bin()
         return self._current_state
@@ -249,8 +247,8 @@ class ArmEnv(CoreEnv):
                 continue
             t = 0
             for i in np.arange(self._grid.shape[0] - 1, 0, -1):
-                if (self._grid[i, j] == 1 and self._grid[i - 1, j] != 1\
-                        and (i + 1 == self._grid.shape[0] or self._grid[i + 1, j] == 1)):
+                if (self.is_cube(i, j) and not self.is_cube(i - 1, j)
+                        and (i + 1 == self._grid.shape[0] or self.is_cube(i + 1, j))):
                     t = self._grid.shape[0] - i
                     h.append(t)
                     break
@@ -268,13 +266,31 @@ class ArmEnv(CoreEnv):
 
 
 
+env = ArmEnv(size_x=5,
+             size_y=1,
+             agents_num=1,
+             cubes_cnt=2,
+             episode_max_length=200,
+             finish_reward=200,
+             action_minus_reward=0.0,
+             tower_target_size=3)
+
+'''
+env.render()
+env._grid[3, 0] = 1
+env.step([3])
+env.step([3])
+env.step([4])
+env.step([1])
+env.render()
+'''
 
 '''
 ===================
 TEST CONFIGURATION
 ===================
 '''
-
+'''
 env = ArmEnv(size_x=5,
              size_y=5,
              agents_num=2,
@@ -284,16 +300,7 @@ env = ArmEnv(size_x=5,
              action_minus_reward=0.0,
              tower_target_size=3)
 
-'''
-env._grid[4, 3] = 0
-env._grid[4, 2] = 0
-env._grid[1, 4] = 2
-env._grid[2, 4] = 1
-env._grid[3, 4] = 1
-env._grid[4, 4] = 2
-'''
-
-'''
+print(env.get_tower_height())
 env.render()
 
 env.step([3, 3])
@@ -324,8 +331,6 @@ env.render()
 print(env.get_tower_height())
 
 '''
-
-#print(env.get_tower_height())
 #env.reset()
 #env.step([3, 2])
 #env.step([3, 2])
@@ -359,4 +364,3 @@ DOWN=3,
 ON=4,
 OFF=5
 '''
-
