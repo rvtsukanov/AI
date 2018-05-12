@@ -1,6 +1,7 @@
 from collections import namedtuple
 import numpy as np
 import sys
+import random
 from gym import spaces
 from env_core import CoreEnv
 
@@ -41,18 +42,29 @@ class ArmEnv(CoreEnv):
     }
 
     def __init__(self, size_x, size_y, agents_num, cubes_cnt, episode_max_length,
-                 finish_reward, action_minus_reward, tower_target_size):
+                 finish_reward, action_minus_reward, tower_target_size, cube_type_cnt=2):
+        assert agents_num > cube_type_cnt, 'too many types of boxes ({}) for {} agents'.format(cube_type_cnt, agents_num)
         self._size_x = size_x
         self._size_y = size_y
         self._grid = np.zeros(shape=(self._size_x, self._size_y), dtype=np.int32)
         self._agents_num = agents_num
         self.agents = []
         for i in range(self._agents_num):
-            self.agents.append(Agent(i, 0, i, False))
+            self.agents.append(Agent(i, 0, i, 1, False))
         self._cubes_cnt = cubes_cnt
-        #self.cube_type = [1, 7]
-        self.cube_type = [1, 7]
+
+        # As default, we use only 2 types of cubes which are represented as "1" and "7"
+        # If you need more than 2 -> cubes are represented with free random numbers
+        if cube_type_cnt == 1:
+            self.cube_type = [1]
+        elif cube_type_cnt == 2:
+            self.cube_type = [1, 7]
+        else:
+            target_list = range(4, 10)
+            self.cube_type = [1] + random.sample(target_list, cube_type_cnt - 1)
+
         self._episode_max_length = episode_max_length
+
         self._finish_reward = finish_reward
         self._action_minus_reward = action_minus_reward
         self._tower_target_size = tower_target_size
