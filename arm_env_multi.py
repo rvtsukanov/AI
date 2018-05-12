@@ -1,11 +1,7 @@
 from collections import namedtuple
-
 import numpy as np
 import sys
-from termcolor import colored
-
 from gym import spaces
-
 from env_core import CoreEnv
 
 
@@ -54,6 +50,7 @@ class ArmEnv(CoreEnv):
         for i in range(self._agents_num):
             self.agents.append(Agent(i, 0, i, False))
         self._cubes_cnt = cubes_cnt
+        #self.cube_type = [1, 7]
         self.cube_type = [1, 7]
         self._episode_max_length = episode_max_length
         self._finish_reward = finish_reward
@@ -98,16 +95,17 @@ class ArmEnv(CoreEnv):
             if a[num_agent] in self.MOVE_ACTIONS:
                 cube_dx, cube_dy = self.MOVE_ACTIONS[self.ACTIONS.DOWN]
                 cube_x, cube_y = agent.pos_x + cube_dx, agent.pos_y + cube_dy
-                current_box_type = self._grid[cube_x, cube_y]
 
+                #if self.ok(cube_x, cube_y):
                 #check is there magneted box downside?
                 # if there is -> change both coordinats: agend and box
                 # if not      -> only agent's
 
                 # Also, check, can particular agent move box of this type?
-                if agent.toogle and agent.typ == self._grid[cube_x, cube_y] \
-                        and self.ok(cube_x, cube_y) and self.is_cube(cube_x, cube_y):
+                if agent.toogle and self.ok(cube_x, cube_y) and agent.typ == self._grid[cube_x, cube_y] \
+                        and self.is_cube(cube_x, cube_y):
 
+                    current_box_type = self._grid[cube_x, cube_y]
                     new_arm_x, new_arm_y = agent.pos_x + self.MOVE_ACTIONS[a[num_agent]][0], \
                                            agent.pos_y + self.MOVE_ACTIONS[a[num_agent]][1]
                     new_cube_x, new_cube_y = new_arm_x + cube_dx, new_arm_y + cube_dy
@@ -265,7 +263,7 @@ class ArmEnv(CoreEnv):
                 self.step((4, act))
 
 
-
+'''
 env = ArmEnv(size_x=5,
              size_y=1,
              agents_num=1,
@@ -274,6 +272,8 @@ env = ArmEnv(size_x=5,
              finish_reward=200,
              action_minus_reward=0.0,
              tower_target_size=3)
+             
+'''
 
 '''
 env.render()
